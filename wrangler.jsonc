@@ -1,11 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tableg", 
-  "compatibility_date": "2025-09-27",
+  "name": "tableg",
+  "main": ".open-next/worker.js", // Đường dẫn đến file xử lý chính
+  "compatibility_date": "2024-09-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets", // Đường dẫn đến các file giao diện, hình ảnh
+    "binding": "ASSETS"
+  },
   "observability": {
     "enabled": true
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+  }
 }

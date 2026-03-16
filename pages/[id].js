@@ -18,11 +18,10 @@ const db = getDatabase(app);
 
 export default function TVDisplay() {
   const router = useRouter();
-  const { id } = router.query; 
   const [data, setData] = useState(null);
   const [time, setTime] = useState("");
   const isFirstRender = useRef(true);
-  const currentTemplateId = useRef(""); // Theo dõi nếu admin đổi mẫu giao diện
+  const currentTemplateId = useRef("");
 
   // 1. Đồng hồ
   useEffect(() => {
@@ -35,51 +34,53 @@ export default function TVDisplay() {
 
   // 2. Lắng nghe dữ liệu Firebase
   useEffect(() => {
+    // THÊM: Đợi router sẵn sàng để lấy ID (Rất quan trọng cho Tivi)
+    if (!router.isReady) return;
+
+    const { id } = router.query;
     if (!id) return;
+
     const boardRef = ref(db, `tv_sessions/${id}`);
-    onValue(boardRef, (snapshot) => {
+    const unsubscribe = onValue(boardRef, (snapshot) => {
       if (snapshot.exists()) {
         const boardData = snapshot.val();
         setData(boardData);
         
-        const { fullHTML, rowsHtml } = renderBoard(boardData);
+        // SỬA: Nhận thêm marqueeText từ hàm renderBoard
+        const { fullHTML, rowsHtml, marqueeText } = renderBoard(boardData);
 
-        // NẾU: Lần đầu load HOẶC Admin đổi mẫu giao diện khác
         if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
-          document.getElementById('display-board').innerHTML = fullHTML;
+          const container = document.getElementById('display-board');
+          if (container) container.innerHTML = fullHTML;
           isFirstRender.current = false;
           currentTemplateId.current = boardData.template_id;
         } else {
-          // NẾU: Chỉ là cập nhật giá (vẫn dùng mẫu cũ) -> Chỉ thay phần ruột
-          // Tìm chỗ dán phù hợp cho từng mẫu:
           const target = document.querySelector('.price-table tbody') || 
                          document.querySelector('.grid-container') || 
                          document.querySelector('.price-table');
           
-          if (target) {
-            target.innerHTML = rowsHtml;
-          }
-          // 2. CẬP NHẬT CHỮ CHẠY (Đây là phần bạn cần)
+          if (target) target.innerHTML = rowsHtml;
+
+          // Cập nhật chữ chạy Realtime
           const marqueeTag = document.querySelector('marquee');
-          if (marqueeTag) {
-              // Chỉ cập nhật nếu chữ chạy khác với cái đang hiển thị
-              if (marqueeTag.innerText !== marqueeText) {
-                marqueeTag.innerText = marqueeText;
-              }
+          if (marqueeTag && marqueeTag.innerText !== marqueeText) {
+             marqueeTag.innerText = marqueeText;
           }
         }
       }
     });
-  }, [id]);
+
+    return () => unsubscribe();
+  }, [router.isReady, router.query]); // Theo dõi router
 
   const renderBoard = (data) => {
-    if (!data) return { fullHTML: "", rowsHtml: "" };
+    if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
     
     let html = data.html_template || "";
     let rowT = data.row_template || "";
     let rowsHtml = "";
+    let mText = data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
 
-    // Tạo danh sách hàng giá vàng
     if (data.prices) {
       data.prices.forEach(p => {
         rowsHtml += rowT
@@ -90,26 +91,26 @@ export default function TVDisplay() {
     }
 
     const now = new Date();
-    const dateStr = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+    const dateStr = now.getDate() + "/" + (now.getMonth() + 1) + "/" + now.getFullYear();
 
     const fullHTML = html
       .replace(/{{SHOP_NAME}}/g, data.shop_name || "TIỆM VÀNG")
       .replace(/{{SHOP_ADDRESS}}/g, data.shop_address || "")
       .replace(/{{SHOP_PHONE}}/g, data.shop_phone || "")
       .replace(/{{CURRENT_DATE}}/g, dateStr)
-      .replace(/{{MARQUEE_TEXT}}/g, data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!")
+      .replace(/{{MARQUEE_TEXT}}/g, mText)
       .replace(/{{PRICE_LIST}}/g, rowsHtml);
 
-    return { fullHTML, rowsHtml };
+    return { fullHTML, rowsHtml, marqueeText: mText }; // Trả về đủ 3 thứ
   };
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <style dangerouslySetInnerHTML={{ __html: data?.css_template || "" }} />
+    <div style={{ minHeight: '100vh'}}>
+      {/* Trình duyệt Tivi cũ không thích dấu ?. nên viết kiểu an toàn */}
+      <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
       <div id="display-board">
-        <div style={{textAlign:'center', paddingTop:'20%'}}>Đang tải...</div>
+        <div style={{textAlign:'center', paddingTop:'20%'}}>Đang kết nối bảng giá...</div>
       </div>
-      {/* Đồng hồ hiển thị nếu mẫu Hữu Tín/Xanh cần ID clock */}
       <script dangerouslySetInnerHTML={{ __html: `
         setInterval(() => {
           const el = document.getElementById('clock');

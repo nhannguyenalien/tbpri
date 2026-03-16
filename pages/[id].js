@@ -96,10 +96,10 @@ export default function TVDisplay() {
   };
 
   return (
-    <div style={{ background: '#000', minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       <style dangerouslySetInnerHTML={{ __html: data?.css_template || "" }} />
       <div id="display-board">
-        <div style={{color:'#fff', textAlign:'center', paddingTop:'20%'}}>Đang tải...</div>
+        <div style={{textAlign:'center', paddingTop:'20%'}}>Đang tải...</div>
       </div>
       {/* Đồng hồ hiển thị nếu mẫu Hữu Tín/Xanh cần ID clock */}
       <script dangerouslySetInnerHTML={{ __html: `

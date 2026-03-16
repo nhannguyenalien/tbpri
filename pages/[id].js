@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 
@@ -21,43 +21,58 @@ export default function TVDisplay() {
   const { id } = router.query; 
   const [data, setData] = useState(null);
   const [time, setTime] = useState("");
+  const isFirstRender = useRef(true);
+  const currentTemplateId = useRef(""); // Theo dõi nếu admin đổi mẫu giao diện
 
-  // 1. Logic chạy đồng hồ Realtime
+  // 1. Đồng hồ
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      const h = String(now.getHours()).padStart(2, '0');
-      const m = String(now.getMinutes()).padStart(2, '0');
-      const s = String(now.getSeconds()).padStart(2, '0');
-      setTime(`${h}:${m}:${s}`);
+      setTime(now.toLocaleTimeString('vi-VN'));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Cập nhật đồng hồ vào HTML sau khi đã vẽ xong giao diện
-  useEffect(() => {
-    const clockEl = document.getElementById('clock');
-    if (clockEl) clockEl.innerText = time;
-  }, [time]);
-
-  // 2. Lấy dữ liệu từ Firebase
+  // 2. Lắng nghe dữ liệu Firebase
   useEffect(() => {
     if (!id) return;
-    return onValue(ref(db, `tv_sessions/${id}`), (s) => s.exists() && setData(s.val()));
+    const boardRef = ref(db, `tv_sessions/${id}`);
+    onValue(boardRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const boardData = snapshot.val();
+        setData(boardData);
+        
+        const { fullHTML, rowsHtml } = renderBoard(boardData);
+
+        // NẾU: Lần đầu load HOẶC Admin đổi mẫu giao diện khác
+        if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
+          document.getElementById('display-board').innerHTML = fullHTML;
+          isFirstRender.current = false;
+          currentTemplateId.current = boardData.template_id;
+        } else {
+          // NẾU: Chỉ là cập nhật giá (vẫn dùng mẫu cũ) -> Chỉ thay phần ruột
+          // Tìm chỗ dán phù hợp cho từng mẫu:
+          const target = document.querySelector('.price-table tbody') || 
+                         document.querySelector('.grid-container') || 
+                         document.querySelector('.price-table');
+          
+          if (target) {
+            target.innerHTML = rowsHtml;
+          }
+        }
+      }
+    });
   }, [id]);
 
-  if (!data) return <div style={{background:'#800000', color:'#fff', height:'100vh', display:'flex', alignItems:'center', justifyContent:'center'}}><h1>Đang tải...</h1></div>;
-
-  const renderHTML = () => {
-    // SỬA LỖI: Kiểm tra xem template có thực sự tồn tại không
-    let html = (data.html_template && data.html_template !== "") ? data.html_template : "<div style='color:white; padding:50px;'><h1>{{SHOP_NAME}}</h1><p>Vui lòng chọn giao diện tại trang Admin</p></div>";
-    let rowT = (data.row_template && data.row_template !== "") ? data.row_template : "<tr><td>{{LOAI_VANG}}</td><td>{{GIA_MUA}}</td><td>{{GIA_BAN}}</td></tr>";
+  const renderBoard = (data) => {
+    if (!data) return { fullHTML: "", rowsHtml: "" };
     
+    let html = data.html_template || "";
+    let rowT = data.row_template || "";
     let rowsHtml = "";
-    // SỬA LỖI: Nếu chưa có giá nào thì hiện dòng thông báo thay vì để trống
-    if (!data.prices || data.prices.length === 0) {
-      rowsHtml = "<tr><td colspan='3' style='font-size:2rem; color:#fff;'>Đang cập nhật giá...</td></tr>";
-    } else {
+
+    // Tạo danh sách hàng giá vàng
+    if (data.prices) {
       data.prices.forEach(p => {
         rowsHtml += rowT
           .replace(/{{LOAI_VANG}}/g, p.name || "")
@@ -67,22 +82,32 @@ export default function TVDisplay() {
     }
 
     const now = new Date();
-    const dateStr = `Ngày ${now.getDate()} thg ${now.getMonth() + 1} năm ${now.getFullYear()}`;
+    const dateStr = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
-    return html
-      .replace(/{{SHOP_NAME}}/g, data.shop_name || "Tên Tiệm Vàng")
-      .replace(/{{SHOP_ADDRESS}}/g, data.shop_address || "Địa chỉ chưa cập nhật")
-      .replace(/{{SHOP_PHONE}}/g, data.shop_phone || "SĐT chưa cập nhật")
+    const fullHTML = html
+      .replace(/{{SHOP_NAME}}/g, data.shop_name || "TIỆM VÀNG")
+      .replace(/{{SHOP_ADDRESS}}/g, data.shop_address || "")
+      .replace(/{{SHOP_PHONE}}/g, data.shop_phone || "")
       .replace(/{{CURRENT_DATE}}/g, dateStr)
-      .replace(/{{MARQUEE_TEXT}}/g, data.marquee_text || "Kính chào quý khách!")
+      .replace(/{{MARQUEE_TEXT}}/g, data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!")
       .replace(/{{PRICE_LIST}}/g, rowsHtml);
+
+    return { fullHTML, rowsHtml };
   };
 
   return (
-    <>
-      {/* Nạp CSS từ Database */}
-      <style>{data.css_template}</style>
-      <div dangerouslySetInnerHTML={{ __html: renderHTML() }} />
-    </>
+    <div style={{ background: '#000', minHeight: '100vh' }}>
+      <style dangerouslySetInnerHTML={{ __html: data?.css_template || "" }} />
+      <div id="display-board">
+        <div style={{color:'#fff', textAlign:'center', paddingTop:'20%'}}>Đang tải...</div>
+      </div>
+      {/* Đồng hồ hiển thị nếu mẫu Hữu Tín/Xanh cần ID clock */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        setInterval(() => {
+          const el = document.getElementById('clock');
+          if(el) el.innerText = new Date().toLocaleTimeString('vi-VN');
+        }, 1000);
+      `}} />
+    </div>
   );
 }

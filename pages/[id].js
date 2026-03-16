@@ -59,6 +59,14 @@ export default function TVDisplay() {
           if (target) {
             target.innerHTML = rowsHtml;
           }
+          // 2. CẬP NHẬT CHỮ CHẠY (Đây là phần bạn cần)
+          const marqueeTag = document.querySelector('marquee');
+          if (marqueeTag) {
+              // Chỉ cập nhật nếu chữ chạy khác với cái đang hiển thị
+              if (marqueeTag.innerText !== marqueeText) {
+                marqueeTag.innerText = marqueeText;
+              }
+          }
         }
       }
     });

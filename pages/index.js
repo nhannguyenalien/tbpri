@@ -126,6 +126,16 @@ export default function HomeAdmin() {
         ))}
         <button onClick={() => handleUpdate('prices', [...(boardData?.prices || []), { name: "VÀNG MỚI", mua: 0, ban: 0 }])} style={{ width: '100%', padding: '10px', background: '#00cc66', color: '#fff', border: 'none' }}>+ THÊM HÀNG</button>
       </div>
+      <div style={{ marginTop: '10px' }}>
+        <label>Chữ chạy dưới màn hình:</label>
+        <input 
+          type="text" 
+          value={boardData?.marquee_text || ""} 
+          onChange={(e) => handleUpdate('marquee_text', e.target.value)} 
+          style={{ width: '100%', padding: '10px', marginTop: '5px' }}
+          placeholder="Nhập nội dung thông báo..."
+        />
+      </div>
 
       <div style={{ marginTop: '20px' }}>
         <h3>🎨 Chọn Giao Diện</h3>

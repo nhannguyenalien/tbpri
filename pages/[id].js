@@ -105,7 +105,7 @@ export default function TVDisplay() {
   };
 
   return (
-    <div style={{ minHeight: '100vh'}}>
+    <div >
       {/* Trình duyệt Tivi cũ không thích dấu ?. nên viết kiểu an toàn */}
       <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
       <div id="display-board">

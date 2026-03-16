@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, update, set, onValue } from 'firebase/database';
+import { getDatabase, ref, update, set, onValue, push, serverTimestamp } from 'firebase/database';
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 
+// 1. Cấu hình Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
   authDomain: "pricegold-4925d.firebaseapp.com",
@@ -17,133 +18,229 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getDatabase(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2"; // UID Admin của Nhan
 
 export default function HomeAdmin() {
   const [user, setUser] = useState(null);
   const [boardData, setBoardData] = useState(null);
   const [globalTemplates, setGlobalTemplates] = useState({});
+  const [history, setHistory] = useState([]);
+  const [isArchiving, setIsArchiving] = useState(false);
   
-  // State cho Form đăng nhập Email
+  // Fingerprint để so sánh giá cũ/mới (Chống dư thừa dữ liệu)
+  const lastSavedPricesRef = useRef(""); 
+
+  // State cho Đăng nhập
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  // 2. Lắng nghe trạng thái User và Dữ liệu
   useEffect(() => {
     return onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
+        // Lấy giá hiện tại trên Tivi
         onValue(ref(db, `tv_sessions/${currentUser.uid}`), (s) => {
           if (s.exists()) setBoardData(s.val());
           else set(ref(db, `tv_sessions/${currentUser.uid}`), { shop_name: "Tiệm Vàng Mới", prices: [] });
         });
+        // Lấy kho Template
         onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val()));
+        // Lấy 10 bản ghi lịch sử mới nhất
+        onValue(ref(db, `price_history/${currentUser.uid}`), (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            const sorted = Object.entries(data)
+              .map(([id, val]) => ({ id, ...val }))
+              .sort((a, b) => b.timestamp - a.timestamp);
+            setHistory(sorted.slice(0, 10));
+          }
+        });
       }
     });
   }, []);
 
-  const handleUpdate = (field, value) => update(ref(db, `tv_sessions/${user.uid}`), { [field]: value });
+  // 1. Khai báo Ref để ghi nhớ trạng thái (không gây render lại)
+  const lastSavedFingerprint = useRef("");
+  // 3. Logic Tự động Lưu Lịch sử (Thông minh & Tiết kiệm)
+  useEffect(() => {
+  if (!boardData?.prices || boardData.prices.length === 0) return;
 
-  // Hàm đăng nhập bằng Email
-  const loginWithEmail = async (e) => {
-    e.preventDefault();
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      alert("Lỗi: " + error.message);
+  // Tạo dấu vân tay (chỉ lấy Tên, Mua, Bán để so sánh)
+  const currentFingerprint = JSON.stringify(boardData.prices);
+  
+  // Lấy ngày hiện tại (Ví dụ: 16/03/2026)
+  const today = new Date().toLocaleDateString('vi-VN');
+  
+  // Lấy ngày của bản ghi lịch sử gần nhất trong danh sách
+  const lastRecordDate = history.length > 0 ? history[0].dateString.split(' ')[1] : "";
+
+  const timer = setTimeout(() => {
+    /* ĐIỀU KIỆN LƯU:
+       - Trường hợp 1: Giá thực sự có thay đổi (currentFingerprint khác bản cũ)
+       - Trường hợp 2: Hôm nay chưa có bản ghi nào (today khác lastRecordDate)
+    */
+    const isPriceChanged = currentFingerprint !== lastSavedFingerprint.current;
+    const isNewDay = today !== lastRecordDate;
+
+    if (isPriceChanged || isNewDay) {
+      setIsArchiving(true);
+      
+      push(ref(db, `price_history/${user.uid}`), {
+        prices: boardData.prices,
+        timestamp: serverTimestamp(),
+        dateString: new Date().toLocaleString('vi-VN')
+      }).then(() => {
+        // Cập nhật dấu vân tay sau khi lưu thành công
+        lastSavedFingerprint.current = currentFingerprint;
+        setIsArchiving(false);
+        console.log(isNewDay ? "🌅 Đã chốt sổ ngày mới" : "📈 Đã lưu lịch sử thay đổi giá");
+      });
     }
-  };
+  }, 10000); // Đợi 10 giây sau khi ngừng thao tác để gom dữ liệu
+
+  return () => clearTimeout(timer);
+}, [boardData?.prices, history]);
+
+  const handleUpdate = (field, value) => update(ref(db, `tv_sessions/${user.uid}`), { [field]: value });
 
   const applyTheme = (themeKey) => {
     const theme = globalTemplates[themeKey];
+    if (!theme) return;
     update(ref(db, `tv_sessions/${user.uid}`), {
       html_template: theme.html_template,
       row_template: theme.row_template,
-      css_template: theme.css_template
+      css_template: theme.css_template,
+      template_id: themeKey
     });
-    alert("Đã áp dụng giao diện!");
+    alert("Đã đổi giao diện: " + theme.name);
   };
 
-  // --- GIAO DIỆN 1: MÀN HÌNH ĐĂNG NHẬP ---
+  const downloadCSV = (item) => {
+    let csv = "\uFEFFLoại vàng,Mua vào,Bán ra\n";
+    item.prices.forEach(p => { csv += `${p.name},${p.mua},${p.ban}\n`; });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `LichSuGia_${item.dateString.replace(/[/:]/g, '-')}.csv`;
+    link.click();
+  };
+
+  // --- UI: LOGIN ---
   if (!user) {
     return (
       <div style={{ padding: '50px 20px', fontFamily: 'sans-serif', maxWidth: '400px', margin: '0 auto', textAlign: 'center' }}>
-        <h1 style={{ color: '#e94560' }}>🔐 HỆ THỐNG QUẢN TRỊ</h1>
-        
-        {/* Đăng nhập bằng Google */}
-        <button onClick={() => signInWithPopup(auth, googleProvider)} style={{ width: '100%', padding: '15px', background: '#4285F4', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginBottom: '20px' }}>
-          Tiếp tục với Google
+        <h1 style={{ color: '#007acc' }}>GOLD PRICE ADMIN</h1>
+        <button onClick={() => signInWithPopup(auth, googleProvider)} style={{ width: '100%', padding: '12px', background: '#fff', color: '#444', border: '1px solid #ddd', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginBottom: '15px', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px' }}>
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20"/> Đăng nhập Google
         </button>
-
-        <div style={{ margin: '20px 0', color: '#999' }}>─── HOẶC ───</div>
-
-        {/* Form Đăng nhập Email/Mật khẩu cho Admin */}
-        <form onSubmit={loginWithEmail} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <input type="email" placeholder="Email Admin" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '15px', borderRadius: '5px', border: '1px solid #ccc' }} required />
-          <input type="password" placeholder="Mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '15px', borderRadius: '5px', border: '1px solid #ccc' }} required />
-          <button type="submit" style={{ padding: '15px', background: '#333', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Đăng nhập Admin</button>
+        <div style={{ margin: '15px 0', color: '#ccc', fontSize:'12px' }}>HOẶC DÙNG TÀI KHOẢN ADMIN</div>
+        <form onSubmit={(e) => { e.preventDefault(); signInWithEmailAndPassword(auth, email, password).catch(err => alert("Sai thông tin!")); }} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '5px' }} />
+          <input type="password" placeholder="Mật khẩu" value={password} onChange={e => setPassword(e.target.value)} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '5px' }} />
+          <button type="submit" style={{ padding: '12px', background: '#007acc', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Đăng nhập</button>
         </form>
       </div>
     );
   }
 
-  // --- GIAO DIỆN 2: BẢNG ĐIỀU KHIỂN (Giữ nguyên phần render giá vàng của bạn) ---
+  // --- UI: DASHBOARD ---
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <span>ID: <strong>{user.uid.slice(0,8)}...</strong></span>
-        <button onClick={() => signOut(auth)}>Đăng xuất</button>
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Arial, sans-serif', background: '#f8f9fa', minHeight: '100vh' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '10px', background: '#fff', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <div>
+          <div style={{fontSize: '12px', color: '#888'}}>Xin chào,</div>
+          <strong style={{fontSize: '14px'}}>{user.email}</strong>
+        </div>
+        <button onClick={() => signOut(auth)} style={{ padding: '5px 15px', background: '#f44336', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Đăng xuất</button>
+      </header>
+
+      {isArchiving && <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', background: '#333', color: '#fff', padding: '8px 20px', borderRadius: '20px', fontSize: '12px', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>🔄 Đang tự động lưu lịch sử giá...</div>}
+
+      <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>
+        <strong>📺 Link hiển thị Tivi: </strong>
+        <a href={`/${user.uid}`} target="_blank" rel="noreferrer" style={{color: '#007acc'}}>{window.location.origin}/{user.uid}</a>
       </div>
 
-      <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '10px', marginBottom: '20px' }}>
-        <strong>Link Tivi: </strong>
-        <a href={`/${user.uid}`} target="_blank" rel="noreferrer">{window.location.origin}/{user.uid}</a>
-      </div>
-
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #ddd' }}>
-        <h3>⚙️ Thông tin tiệm</h3>
-        <input type="text" value={boardData?.shop_name || ''} onChange={(e) => handleUpdate('shop_name', e.target.value)} style={{width:'100%', padding:'10px', marginBottom:'10px'}} placeholder="Tên tiệm" />
-        <input type="text" value={boardData?.shop_address || ''} onChange={(e) => handleUpdate('shop_address', e.target.value)} style={{width:'100%', padding:'10px', marginBottom:'10px'}} placeholder="Địa chỉ" />
-        <input type="text" value={boardData?.shop_phone || ''} onChange={(e) => handleUpdate('shop_phone', e.target.value)} style={{width:'100%', padding:'10px', marginBottom:'10px'}} placeholder="Số điện thoại" />
-        <input type="text" value={boardData?.marquee_text || ''} onChange={(e) => handleUpdate('marquee_text', e.target.value)} style={{width:'100%', padding:'10px'}} placeholder="Chữ chạy quảng cáo" />
-      </div>
-
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '10px', border: '1px solid #ddd' }}>
-        <h3>💰 Giá Vàng</h3>
-        {(boardData?.prices || []).map((p, i) => (
-          <div key={i} style={{ marginBottom: '10px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-            <input type="text" value={p.name} onChange={(e) => {
-              const newP = [...boardData.prices]; newP[i].name = e.target.value; handleUpdate('prices', newP);
-            }} style={{width:'100%', fontWeight:'bold'}} />
-            <div style={{display:'flex', gap:'5px', marginTop:'5px'}}>
-              <input type="number" value={p.mua} onChange={(e) => {
-                const newP = [...boardData.prices]; newP[i].mua = e.target.value; handleUpdate('prices', newP);
-              }} style={{flex:1, color:'green'}} />
-              <input type="number" value={p.ban} onChange={(e) => {
-                const newP = [...boardData.prices]; newP[i].ban = e.target.value; handleUpdate('prices', newP);
-              }} style={{flex:1, color:'red'}} />
-              <button onClick={() => handleUpdate('prices', boardData.prices.filter((_, idx) => idx !== i))} style={{background:'red', color:'white', border:'none'}}>Xóa</button>
-            </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+        {/* KHỐI 1: THÔNG TIN CƠ BẢN */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+          <h3 style={{marginTop:0, fontSize: '16px', borderBottom: '1px solid #eee', paddingBottom: '10px'}}>⚙️ Thông tin cửa hàng</h3>
+          <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+            <input type="text" value={boardData?.shop_name || ''} onChange={(e) => handleUpdate('shop_name', e.target.value)} style={{width:'100%', padding:'10px', border:'1px solid #ddd', borderRadius:'4px'}} placeholder="Tên tiệm vàng" />
+            <input type="text" value={boardData?.marquee_text || ''} onChange={(e) => handleUpdate('marquee_text', e.target.value)} style={{width:'100%', padding:'10px', border:'1px solid #ddd', borderRadius:'4px'}} placeholder="Nội dung chữ chạy thông báo..." />
           </div>
-        ))}
-        <button onClick={() => handleUpdate('prices', [...(boardData?.prices || []), { name: "VÀNG MỚI", mua: 0, ban: 0 }])} style={{ width: '100%', padding: '10px', background: '#00cc66', color: '#fff', border: 'none' }}>+ THÊM HÀNG</button>
-      </div>
-      <div style={{ marginTop: '10px' }}>
-        <label>Chữ chạy dưới màn hình:</label>
-        <input 
-          type="text" 
-          value={boardData?.marquee_text || ""} 
-          onChange={(e) => handleUpdate('marquee_text', e.target.value)} 
-          style={{ width: '100%', padding: '10px', marginTop: '5px' }}
-          placeholder="Nhập nội dung thông báo..."
-        />
-      </div>
+        </div>
 
-      <div style={{ marginTop: '20px' }}>
-        <h3>🎨 Chọn Giao Diện</h3>
-        {Object.keys(globalTemplates).map((key) => (
-          <button key={key} onClick={() => applyTheme(key)} style={{ padding: '10px', marginRight: '10px', cursor: 'pointer' }}>
-            {globalTemplates[key].name || key}
-          </button>
-        ))}
+        {/* KHỐI 2: CẬP NHẬT GIÁ */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+          <h3 style={{marginTop:0, fontSize: '16px', borderBottom: '1px solid #eee', paddingBottom: '10px'}}>💰 Bảng giá hiện tại</h3>
+          {(boardData?.prices || []).map((p, i) => (
+            <div key={i} style={{ marginBottom: '15px', padding: '10px', background: '#fcfcfc', border: '1px solid #f0f0f0', borderRadius: '6px' }}>
+              <input type="text" value={p.name} onChange={(e) => {
+                const newP = [...boardData.prices]; newP[i].name = e.target.value; handleUpdate('prices', newP);
+              }} style={{width:'100%', fontWeight:'bold', border:'none', background:'transparent', marginBottom:'5px', fontSize:'15px'}} />
+              <div style={{display:'flex', gap:'10px'}}>
+                <div style={{flex:1}}>
+                  <small style={{color:'green'}}>MUA VÀO</small>
+                  <input type="number" value={p.mua} onChange={(e) => {
+                    const newP = [...boardData.prices]; newP[i].mua = e.target.value; handleUpdate('prices', newP);
+                  }} style={{width:'100%', padding:'8px', border:'1px solid #ddd', borderRadius:'4px', color:'green', fontWeight:'bold'}} />
+                </div>
+                <div style={{flex:1}}>
+                  <small style={{color:'red'}}>BÁN RA</small>
+                  <input type="number" value={p.ban} onChange={(e) => {
+                    const newP = [...boardData.prices]; newP[i].ban = e.target.value; handleUpdate('prices', newP);
+                  }} style={{width:'100%', padding:'8px', border:'1px solid #ddd', borderRadius:'4px', color:'red', fontWeight:'bold'}} />
+                </div>
+                <button onClick={() => handleUpdate('prices', boardData.prices.filter((_, idx) => idx !== i))} style={{ alignSelf:'flex-end', padding:'8px', background:'#fff', color:'red', border:'1px solid red', borderRadius:'4px', cursor:'pointer' }}>Xóa</button>
+              </div>
+            </div>
+          ))}
+          <button onClick={() => handleUpdate('prices', [...(boardData?.prices || []), { name: "LOẠI VÀNG MỚI", mua: 0, ban: 0 }])} style={{ width: '100%', padding: '12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ THÊM LOẠI VÀNG</button>
+        </div>
+
+        {/* KHỐI 3: GIAO DIỆN */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+          <h3 style={{marginTop:0, fontSize: '16px'}}>🎨 Chọn giao diện Tivi</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            {Object.keys(globalTemplates).map((key) => (
+              <button key={key} onClick={() => applyTheme(key)} style={{ padding: '10px 15px', cursor: 'pointer', background: boardData?.template_id === key ? '#007acc' : '#f8f9fa', color: boardData?.template_id === key ? '#fff' : '#333', border: '1px solid #ddd', borderRadius: '6px' }}>
+                {globalTemplates[key].name || key}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* KHỐI 4: LỊCH SỬ */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+          <h3 style={{marginTop:0, fontSize: '16px'}}>📜 Lịch sử đổi giá (Snapshot)</h3>
+          <div style={{maxHeight: '300px', overflowY:'auto'}}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead style={{position:'sticky', top:0, background:'#eee'}}>
+                <tr>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Thời gian</th>
+                  <th style={{ padding: '10px', textAlign: 'right' }}>Hành động</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((item) => (
+                  <tr key={item.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '10px' }}>{item.dateString}</td>
+                    <td style={{ padding: '10px', textAlign: 'right' }}>
+                      <button onClick={() => downloadCSV(item)} style={{ background: '#17a2b8', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer' }}>Xuất Excel</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ADMIN ONLY */}
+        {user?.uid === ADMIN_UID && (
+          <button onClick={() => window.location.href='/admintemplate'} style={{ padding: '15px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚙️ QUẢN LÝ KHO TEMPLATE (ADMIN ONLY)</button>
+        )}
       </div>
     </div>
   );

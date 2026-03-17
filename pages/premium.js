@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app'; // Thêm dòng này
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
-import { getAuth, onAuthStateChanged } from 'firebase/auth'; // Thêm onAuthStateChanged
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
-// 1. Cấu hình Firebase (Phải có đoạn này ở đầu file)
-const firebaseConfig = {
+const firebaseConfig = { 
   apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
   authDomain: "pricegold-4925d.firebaseapp.com",
   databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -14,7 +13,6 @@ const firebaseConfig = {
   appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
 };
 
-// Khởi tạo Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getDatabase(app);
 const auth = getAuth(app);
@@ -22,10 +20,10 @@ const auth = getAuth(app);
 export default function PremiumPage() {
   const [boardData, setBoardData] = useState(null);
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // Thêm state loading để dễ theo dõi
+  const [loading, setLoading] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState(null); // State để ẩn/hiện QR
 
   useEffect(() => {
-    // Sử dụng onAuthStateChanged trực tiếp để lấy thông tin user
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
@@ -41,60 +39,73 @@ export default function PremiumPage() {
   }, []);
 
   const isPro = boardData?.plan === 'premium';
-  const expiryDate = boardData?.expiry_date ? new Date(boardData.expiry_date).toLocaleDateString('vi-VN') : null;
+  const shortUid = user?.uid.slice(0, 8).toUpperCase() || "";
+
+  const plans = [
+    { id: 'test', label: 'Gói Test', amount: 1000, desc: 'Dùng thử 1 ngày', color: '#ff5722' },
+    { id: 'month', label: '1 Tháng', amount: 50000, desc: 'Dịch vụ hàng tháng', color: '#007acc' },
+    { id: 'year', label: '1 Năm', amount: 500000, desc: 'Tiết kiệm 20%', color: '#28a745' },
+  ];
 
   const getQRUrl = (amount) => {
     const STK = "9704229244878273"; 
     const BANK = "MB"; 
-    const memo = `GP ${user?.uid.slice(0, 8).toUpperCase()}`;
+    const memo = `GP ${shortUid}`;
     return `https://img.vietqr.io/image/${BANK}-${STK}-compact.png?amount=${amount}&addInfo=${memo}&accountName=NGUYEN%20HUU%20NHAN`;
   };
 
-  // 2. Xử lý các trạng thái hiển thị
-  if (loading) return <div style={{padding:'50px', textAlign:'center'}}>Đang kết nối dữ liệu...</div>;
-  
-  if (!user) return (
-    <div style={{padding:'50px', textAlign:'center'}}>
-      <h3>🔒 Vui lòng đăng nhập Admin trước!</h3>
-      <button onClick={() => window.location.href='/'} style={{padding:'10px 20px', cursor:'pointer'}}>Quay lại Trang chủ</button>
-    </div>
-  );
+  if (loading) return <div style={{padding:'50px', textAlign:'center'}}>Đang tải...</div>;
 
   return (
     <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h2 style={{ textAlign: 'center' }}>💎 Nâng cấp Premium</h2>
-      
+      <h2 style={{ textAlign: 'center', color: '#333' }}>💎 Nâng cấp Premium</h2>
+
       {/* TRẠNG THÁI HIỆN TẠI */}
       <div style={{ background: isPro ? '#e8f5e9' : '#fff3e0', padding: '15px', borderRadius: '10px', marginBottom: '20px', textAlign: 'center', border: '1px solid #ddd' }}>
-        <p>Gói hiện tại: <strong>{isPro ? "PREMIUM" : "MIỄN PHÍ"}</strong></p>
-        {isPro && <p style={{ color: '#2e7d32' }}>Hạn dùng đến: <strong>{expiryDate}</strong></p>}
+        <strong>Gói hiện tại: {isPro ? "✅ PREMIUM" : "❌ MIỄN PHÍ"}</strong>
+        {isPro && <div style={{fontSize:'13px'}}>Hạn dùng: {new Date(boardData.expiry_date).toLocaleString('vi-VN')}</div>}
       </div>
 
-      {!isPro ? (
-        <div style={{ display: 'grid', gap: '15px' }}>
-          <div style={{ border: '2px solid #007acc', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
-            <h3>Gói 1 Tháng</h3>
-            <p style={{ fontSize: '24px', fontWeight: 'bold' }}>50.000đ</p>
-            <img src={getQRUrl(50000)} alt="QR" style={{ width: '100%', maxWidth: '200px' }} />
-            <p style={{ fontSize: '12px', color: '#666' }}>Quét mã để kích hoạt tự động</p>
-          </div>
-          
-          <div style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
-            <h3>Gói 1 Năm (Tiết kiệm)</h3>
-            <p style={{ fontSize: '24px', fontWeight: 'bold' }}>500.000đ</p>
-            <img src={getQRUrl(500000)} alt="QR" style={{ width: '100%', maxWidth: '200px' }} />
-          </div>
-        </div>
-      ) : (
-        <div style={{textAlign:'center'}}>
-           <p>✨ Bạn đang sử dụng các tính năng cao cấp.</p>
-           <button onClick={() => window.location.href='/'} style={{ width: '100%', padding: '15px', background: '#007acc', color:'#fff', border: 'none', borderRadius: '10px', cursor:'pointer' }}>Quay lại Quản lý</button>
-        </div>
-      )}
+      {/* DANH SÁCH GÓI (Dạng Toggle) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {plans.map((plan) => (
+          <div key={plan.id} style={{ border: '1px solid #ddd', borderRadius: '10px', overflow: 'hidden' }}>
+            <button 
+              onClick={() => setSelectedPlan(selectedPlan === plan.id ? null : plan.id)}
+              style={{
+                width: '100%', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                background: selectedPlan === plan.id ? plan.color : '#fff',
+                color: selectedPlan === plan.id ? '#fff' : '#333',
+                border: 'none', cursor: 'pointer', fontWeight: 'bold', transition: '0.3s'
+              }}
+            >
+              <span>{plan.label} - {plan.amount.toLocaleString()}đ</span>
+              <span>{selectedPlan === plan.id ? '▲' : '▼'}</span>
+            </button>
 
-      <div style={{ marginTop: '20px', fontSize: '13px', color: '#888', background: '#f9f9f9', padding: '10px', borderRadius: '5px' }}>
-        <strong>Lưu ý:</strong> Hệ thống tự động kích hoạt sau 1-3 phút kể từ khi nhận được tiền. Vui lòng giữ nguyên nội dung chuyển khoản.
+            {selectedPlan === plan.id && (
+              <div style={{ padding: '20px', textAlign: 'center', background: '#fff' }}>
+                <p style={{fontSize:'14px', color:'#666'}}>{plan.desc}</p>
+                <img 
+                  src={getQRUrl(plan.amount)} 
+                  alt="QR Code" 
+                  style={{ width: '100%', maxWidth: '250px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }} 
+                />
+                <div style={{marginTop:'10px', fontSize:'12px', color:'#888'}}>
+                  Nội dung: <strong>GP {shortUid}</strong>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
+
+      <button 
+        onClick={() => window.location.href='/'} 
+        style={{ width: '100%', marginTop: '30px', padding: '12px', border: 'none', borderRadius: '8px', background: '#333', color: '#fff', cursor: 'pointer' }}
+      >
+        Quay lại Quản lý
+      </button>
     </div>
   );
 }

@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     const amountMatch = content.replace(/,/g, '').match(/\+([0-9]+)/);
     const amountVal = amountMatch ? parseInt(amountMatch[1]) : 0;
 
-    if (amountVal < 1000) return res.status(200).json({ status: 'skip', reason: 'Số tiền quá nhỏ' });
+    if (amountVal < 2000) return res.status(200).json({ status: 'skip', reason: 'Số tiền quá nhỏ' });
 
     // 3. Tìm Full UID của Minh Quân trong DB
     const snapshot = await get(ref(db, 'tv_sessions'));
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
     if (!fullUid) return res.status(200).json({ status: 'error', message: 'Không tìm thấy User' });
 
     // 4. Cộng hạn dùng (1.000đ test cho 1 ngày, >50k cho 1 tháng)
-    const daysToAdd = amountVal >= 50000 ? 30 : 1;
+    const daysToAdd = amountVal >= 50000 ? 30 : 1
     const now = Date.now();
     
     // Lấy hạn cũ nếu có để cộng dồn

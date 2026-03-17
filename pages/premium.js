@@ -42,7 +42,7 @@ export default function PremiumPage() {
   const shortUid = user?.uid.slice(0, 8).toUpperCase() || "";
 
   const plans = [
-    { id: 'test', label: 'Gói Test', amount: 1000, desc: 'Dùng thử 1 ngày', color: '#ff5722' },
+    { id: 'test', label: 'Gói Test', amount: 2000, desc: 'Dùng thử 1 ngày', color: '#ff5722' },
     { id: 'month', label: '1 Tháng', amount: 50000, desc: 'Dịch vụ hàng tháng', color: '#007acc' },
     { id: 'year', label: '1 Năm', amount: 500000, desc: 'Tiết kiệm 20%', color: '#28a745' },
   ];

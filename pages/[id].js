@@ -76,19 +76,25 @@ export default function TVDisplay() {
   const renderBoard = (data) => {
     if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
     
+    // LOGIC PHÂN CẤP: Kiểm tra gói cước
+    const isPro = data.plan === 'premium';
+    
     let html = data.html_template || "";
     let rowT = data.row_template || "";
     let rowsHtml = "";
-    let mText = data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
+    
+    // Nếu Free: Ép dùng chữ chạy mặc định
+    let mText = isPro ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!") : "Chúc Quý Khách Phát Tài Phát Lộc!";
 
-    if (data.prices) {
-      data.prices.forEach(p => {
-        rowsHtml += rowT
-          .replace(/{{LOAI_VANG}}/g, p.name || "")
-          .replace(/{{GIA_MUA}}/g, Number(p.mua || 0).toLocaleString('vi-VN'))
-          .replace(/{{GIA_BAN}}/g, Number(p.ban || 0).toLocaleString('vi-VN'));
-      });
-    }
+    // Nếu Free: Chỉ lấy tối đa 4 dòng giá đầu tiên
+    const displayPrices = isPro ? (data.prices || []) : (data.prices || []).slice(0, 4);
+
+    displayPrices.forEach(p => {
+      rowsHtml += rowT
+        .replace(/{{LOAI_VANG}}/g, p.name || "")
+        .replace(/{{GIA_MUA}}/g, Number(p.mua || 0).toLocaleString('vi-VN'))
+        .replace(/{{GIA_BAN}}/g, Number(p.ban || 0).toLocaleString('vi-VN'));
+    });
 
     const now = new Date();
     const dateStr = now.getDate() + "/" + (now.getMonth() + 1) + "/" + now.getFullYear();
@@ -101,7 +107,7 @@ export default function TVDisplay() {
       .replace(/{{MARQUEE_TEXT}}/g, mText)
       .replace(/{{PRICE_LIST}}/g, rowsHtml);
 
-    return { fullHTML, rowsHtml, marqueeText: mText }; // Trả về đủ 3 thứ
+    return { fullHTML, rowsHtml, marqueeText: mText };
   };
 
   return (

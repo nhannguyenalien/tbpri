@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, update, set, onValue, push, serverTimestamp } from 'firebase/database';
+import { getDatabase, ref, get, update, set, onValue, push, serverTimestamp } from 'firebase/database';
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+
 
 // 1. Cấu hình Firebase
 const firebaseConfig = {
@@ -19,13 +20,12 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2"; // UID Admin của Nhan
-
 // Component bọc các tính năng trả phí
 const PremiumGate = ({ isPro, children, message = "Nâng cấp Premium" }) => {
   if (isPro) return children; // Nếu là Pro, cho xem nội dung gốc bình thường
 
   return (
-    <div 
+    <div
       onClick={() => window.location.href = '/premium'}
       style={{
         cursor: 'pointer',
@@ -57,6 +57,46 @@ export default function HomeAdmin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  //1. redirect tv link
+  const [pairCode, setPairCode] = useState('');
+  const [isPairing, setIsPairing] = useState(false);
+
+  const handlePairTV = async () => {
+    // 1. Kiểm tra quyền và đầu vào
+    if (!isPro) return alert("Tính năng này chỉ dành cho gói Premium!");
+    if (!user || !user.uid) return alert("Vui lòng đăng nhập để thực hiện!");
+    if (pairCode.length !== 6) return alert("Vui lòng nhập đúng 6 chữ số hiện trên TV");
+
+    setIsPairing(true);
+
+    // 2. Tạo tham chiếu đến mã pairing trong Firebase
+    const codeRef = ref(db, `pairing_codes/${pairCode}`);
+
+    try {
+      // 3. Lấy dữ liệu (Dùng hàm 'get' đã import)
+      const snapshot = await get(codeRef);
+
+      if (snapshot.exists()) {
+        // 4. Cập nhật trạng thái (Dùng hàm 'update' đã import)
+        await update(codeRef, {
+          admin_uid: user.uid, // Ghi ID người quản lý
+          status: 'paired',
+          pairedAt: Date.now() // Nên thêm thời gian để quản lý
+        });
+
+        alert("Kết nối Tivi thành công! 🎉");
+        setPairCode(''); // Xóa mã sau khi xong
+      } else {
+        alert("Mã không tồn tại hoặc đã hết hạn!");
+      }
+    } catch (err) {
+      console.error("Lỗi Firebase:", err);
+      alert("Lỗi kết nối: " + err.message);
+    } finally {
+      setIsPairing(false);
+    }
+  };
+
   // 2. Lắng nghe trạng thái User và Dữ liệu
   useEffect(() => {
     return onAuthStateChanged(auth, (currentUser) => {
@@ -86,41 +126,43 @@ export default function HomeAdmin() {
   // 1. Khai báo Ref để ghi nhớ trạng thái (không gây render lại)
   const lastSavedFingerprint = useRef("");
   // 3. Logic Tự động Lưu Lịch sử (Thông minh & Tiết kiệm)
+  // 3. Logic Tự động Lưu Lịch sử (Chỉ lưu 1 bản ghi duy nhất mỗi ngày)
   useEffect(() => {
+    // Chỉ chạy nếu là Pro và có dữ liệu giá
     if (!isPro || !boardData?.prices || boardData.prices.length === 0) return;
 
-    // Tạo dấu vân tay (chỉ lấy Tên, Mua, Bán để so sánh)
-    const currentFingerprint = JSON.stringify(boardData.prices);
-
-    // Lấy ngày hiện tại (Ví dụ: 16/03/2026)
+    // 1. Lấy ngày hiện tại (Ví dụ: "19/3/2026")
     const today = new Date().toLocaleDateString('vi-VN');
 
-    // Lấy ngày của bản ghi lịch sử gần nhất trong danh sách
-    const lastRecordDate = history.length > 0 ? history[0].dateString.split(' ')[1] : "";
+    // 2. KIỂM TRA QUAN TRỌNG: Trong history đã có bản ghi nào của ngày hôm nay chưa?
+    // Chúng ta duyệt qua mảng history và xem có dateString nào chứa ngày hôm nay không.
+    const alreadySavedToday = history.some(record =>
+      record.dateString && record.dateString.includes(today)
+    );
 
+    // Nếu hôm nay đã lưu rồi thì THOÁT LUÔN, không làm gì thêm.
+    if (alreadySavedToday) {
+      console.log(`📅 Ngày ${today} đã được lưu. Hệ thống sẽ không lưu thêm.`);
+      return;
+    }
+
+    // 3. Nếu chưa có bản ghi cho hôm nay, đợi 10 giây sau khi ổn định giá rồi mới lưu
     const timer = setTimeout(() => {
-      /* ĐIỀU KIỆN LƯU:
-         - Trường hợp 1: Giá thực sự có thay đổi (currentFingerprint khác bản cũ)
-         - Trường hợp 2: Hôm nay chưa có bản ghi nào (today khác lastRecordDate)
-      */
-      const isPriceChanged = currentFingerprint !== lastSavedFingerprint.current;
-      const isNewDay = today !== lastRecordDate;
+      setIsArchiving(true);
 
-      if (isPriceChanged || isNewDay) {
-        setIsArchiving(true);
+      push(ref(db, `price_history/${user.uid}`), {
+        prices: boardData.prices,
+        timestamp: serverTimestamp(),
+        dateString: new Date().toLocaleString('vi-VN') // Lưu định dạng "HH:mm:ss DD/MM/YYYY"
+      }).then(() => {
+        setIsArchiving(false);
+        console.log("🌅 Đã chốt sổ giá cho ngày mới: " + today);
+      }).catch(err => {
+        console.error("Lỗi lưu lịch sử:", err);
+        setIsArchiving(false);
+      });
 
-        push(ref(db, `price_history/${user.uid}`), {
-          prices: boardData.prices,
-          timestamp: serverTimestamp(),
-          dateString: new Date().toLocaleString('vi-VN')
-        }).then(() => {
-          // Cập nhật dấu vân tay sau khi lưu thành công
-          lastSavedFingerprint.current = currentFingerprint;
-          setIsArchiving(false);
-          console.log(isNewDay ? "🌅 Đã chốt sổ ngày mới" : "📈 Đã lưu lịch sử thay đổi giá");
-        });
-      }
-    }, 10000); // Đợi 10 giây sau khi ngừng thao tác để gom dữ liệu
+    }, 10000); // 10 giây delay để tránh lưu lúc đang gõ dở
 
     return () => clearTimeout(timer);
   }, [boardData?.prices, history, isPro]);
@@ -193,6 +235,76 @@ export default function HomeAdmin() {
       <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>
         <strong>📺 Link hiển thị Tivi: </strong>
         <a href={`/${user.uid}`} target="_blank" rel="noreferrer" style={{ color: '#007acc' }}>{window.location.origin}/{user.uid}</a>
+
+      </div>
+      <div style={{
+        background: '#fff',
+        padding: '20px',
+        borderRadius: '8px',
+        border: '1px solid #dee2e6',
+        marginTop: '20px',
+        borderLeft: isPro ? '4px solid #007acc' : '4px solid #ff9800' // Đổi màu viền để phân biệt Pro/Free
+      }}>
+        <h3 style={{ marginTop: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📺 Kết nối Tivi mới
+          {!isPro && <PremiumGate isPro={isPro} message="PRO" />}
+        </h3>
+
+        <p style={{ fontSize: '12px', color: '#666' }}>
+          Nhập 6 số đang hiển thị trên màn hình Tivi của bạn:
+        </p>
+
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center',
+          filter: isPro ? 'none' : 'grayscale(100%) opacity(0.6)', // Làm xám và mờ nếu là bản Free
+        }}>
+          <input
+            type="text"
+            maxLength="6"
+            value={isPro ? pairCode : '******'} // Che mã nếu không phải Pro
+            onChange={(e) => setPairCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456"
+            disabled={!isPro} // Khóa input nếu không phải Pro
+            style={{
+              flex: 1,
+              padding: '12px',
+              fontSize: '18px',
+              textAlign: 'center',
+              letterSpacing: '5px',
+              border: '2px solid #dee2e6',
+              borderRadius: '6px',
+              background: isPro ? '#fff' : '#f1f3f5'
+            }}
+          />
+
+          {/* Dùng PremiumGate bọc nút bấm hoặc thay thế nút bấm */}
+          <PremiumGate isPro={isPro} message="Mở khóa kết nối TV">
+            <button
+              onClick={handlePairTV}
+              disabled={isPairing}
+              style={{
+                padding: '12px 20px',
+                background: '#007acc',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {isPairing ? '...' : 'KẾT NỐI'}
+            </button>
+          </PremiumGate>
+        </div>
+
+        {!isPro && (
+          <p style={{ fontSize: '11px', color: '#ff9800', marginTop: '10px', fontStyle: 'italic' }}>
+            * Tính năng đồng bộ Tivi thời gian thực yêu cầu tài khoản Premium.
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
@@ -261,7 +373,7 @@ export default function HomeAdmin() {
               ⚠️ Bản Miễn Phí giới hạn 4 dòng giá. Vui lòng nâng cấp Pro để thêm không giới hạn.
               <PremiumGate isPro={isPro} message="Click để mở khóa Lịch sử & Tải Excel" />
             </div>
-            
+
           )}
         </div>
 
@@ -291,7 +403,7 @@ export default function HomeAdmin() {
           </div>
         </div>
 
-        
+
         {/* KHỐI 4: LỊCH SỬ - Luôn hiện để quảng bá tính năng */}
         <div style={{
           background: '#fff',

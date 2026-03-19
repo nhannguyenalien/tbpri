@@ -20,6 +20,29 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2"; // UID Admin của Nhan
 
+// Component bọc các tính năng trả phí
+const PremiumGate = ({ isPro, children, message = "Nâng cấp Premium" }) => {
+  if (isPro) return children; // Nếu là Pro, cho xem nội dung gốc bình thường
+
+  return (
+    <div 
+      onClick={() => window.location.href = '/premium'}
+      style={{
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        color: '#ff9800',
+        fontSize: '13px',
+        fontWeight: 'bold',
+        textDecoration: 'underline'
+      }}
+    >
+      🔒 {message}
+    </div>
+  );
+};
+
 export default function HomeAdmin() {
   const [user, setUser] = useState(null);
   const [boardData, setBoardData] = useState(null);
@@ -161,6 +184,7 @@ export default function HomeAdmin() {
           <div style={{ fontSize: '12px', color: '#888' }}>Xin chào,</div>
           <strong style={{ fontSize: '14px' }}>{user.email}</strong>
         </div>
+        <PremiumGate isPro={isPro} message="NÂNG CẤP NGAY" />
         <button onClick={() => signOut(auth)} style={{ padding: '5px 15px', background: '#f44336', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Đăng xuất</button>
       </header>
 
@@ -187,6 +211,7 @@ export default function HomeAdmin() {
 
             <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
               Chữ chạy thông báo: {!isPro && <span style={{ color: 'orange' }}>🔒 Chỉ dành cho Pro</span>}
+              <PremiumGate isPro={isPro} message="Mở khóa tính năng này" />
             </label>
             <input
               type="text"
@@ -234,7 +259,9 @@ export default function HomeAdmin() {
           ) : (
             <div style={{ textAlign: 'center', padding: '10px', color: 'orange', border: '1px dashed orange', borderRadius: '6px', fontSize: '13px' }}>
               ⚠️ Bản Miễn Phí giới hạn 4 dòng giá. Vui lòng nâng cấp Pro để thêm không giới hạn.
+              <PremiumGate isPro={isPro} message="Click để mở khóa Lịch sử & Tải Excel" />
             </div>
+            
           )}
         </div>
 
@@ -291,6 +318,7 @@ export default function HomeAdmin() {
               }}
             >
               {isPro ? "📥 TẢI TOÀN BỘ (CSV)" : "🔒 Tải lịch sử"}
+              <PremiumGate isPro={isPro} message="Click để mở khóa Lịch sử & Tải Excel" />
             </button>
           </div>
 

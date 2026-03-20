@@ -20,6 +20,30 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2"; // UID Admin của Nhan
+
+const MiniChart = ({ data, color = "#007acc" }) => {
+  if (!data || data.length < 2) return <div style={{ height: '40px', color: '#ccc', fontSize: '10px', display: 'flex', alignItems: 'center' }}>Đang thu thập dữ liệu...</div>;
+
+  const points = data.map(d => parseFloat(d.sell.replace(/[^0-9]/g, ''))); // Lấy giá bán để vẽ
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const width = 100;
+  const height = 30;
+
+  // Tính toán tọa độ các điểm trên SVG
+  const pathData = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * width;
+    const y = height - ((p - min) / range) * height;
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  return (
+    <svg width="100%" height="40" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <path d={pathData} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
 // Component bọc các tính năng trả phí
 const PremiumGate = ({ isPro, children, message = "Nâng cấp Premium" }) => {
   if (isPro) return children; // Nếu là Pro, cho xem nội dung gốc bình thường
@@ -48,11 +72,12 @@ export default function HomeAdmin() {
   const [boardData, setBoardData] = useState(null);
   const [globalTemplates, setGlobalTemplates] = useState({});
   const [history, setHistory] = useState([]);
+  const [externalPrices, setExternalPrices] = useState({});
   const [isArchiving, setIsArchiving] = useState(false);
   const isPro = boardData?.plan === 'premium';
   // Fingerprint để so sánh giá cũ/mới (Chống dư thừa dữ liệu)
   const lastSavedPricesRef = useRef("");
-
+  const [externalHistory, setExternalHistory] = useState({});
   // State cho Đăng nhập
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,6 +85,13 @@ export default function HomeAdmin() {
   //1. redirect tv link
   const [pairCode, setPairCode] = useState('');
   const [isPairing, setIsPairing] = useState(false);
+
+  const [expandedSources, setExpandedSources] = useState({});
+  const [searchTerm, setSearchTerm] = useState(""); // Để tìm kiếm tiệm
+
+  const toggleExpand = (id) => {
+    setExpandedSources(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const handlePairTV = async () => {
     // 1. Kiểm tra quyền và đầu vào
@@ -97,6 +129,16 @@ export default function HomeAdmin() {
     }
   };
 
+  useEffect(() => {
+    if (user && isPro) {
+      // Lắng nghe lịch sử giá (Lấy 20 bản ghi gần nhất của mỗi tiệm)
+      const historyRef = ref(db, 'external_history');
+      return onValue(historyRef, (snapshot) => {
+        if (snapshot.exists()) setExternalHistory(snapshot.val());
+      });
+    }
+  }, [user, isPro]);
+
   // 2. Lắng nghe trạng thái User và Dữ liệu
   useEffect(() => {
     return onAuthStateChanged(auth, (currentUser) => {
@@ -117,6 +159,11 @@ export default function HomeAdmin() {
               .map(([id, val]) => ({ id, ...val }))
               .sort((a, b) => b.timestamp - a.timestamp);
             setHistory(sorted.slice(0, 10));
+          }
+        });
+        onValue(ref(db, 'external_prices/sources'), (snapshot) => {
+          if (snapshot.exists()) {
+            setExternalPrices(snapshot.val());
           }
         });
       }
@@ -198,6 +245,47 @@ export default function HomeAdmin() {
     link.href = URL.createObjectURL(blob);
     link.download = `ToanBoLichSuGia.csv`;
     link.click();
+  };
+
+  const quickApplyPrice = (item) => {
+    if (!isPro) return alert("Nâng cấp Premium để sử dụng tính năng 'Copy' giá nhanh!");
+
+    const newPrices = [...(boardData?.prices || [])];
+    // Tìm xem trong bảng giá của tiệm đã có loại vàng này chưa (so sánh tên)
+    const index = newPrices.findIndex(p => p.name.toLowerCase().includes(item.label.toLowerCase()));
+
+    if (index !== -1) {
+      newPrices[index].mua = item.buy;
+      newPrices[index].ban = item.sell;
+      alert(`Đã cập nhật giá ${item.label} vào bảng của tiệm!`);
+    } else {
+      // Nếu chưa có thì thêm hàng mới luôn
+      newPrices.push({ name: item.label, mua: item.buy, ban: item.sell });
+      alert(`Đã thêm loại vàng ${item.label} mới vào bảng!`);
+    }
+    handleUpdate('prices', newPrices);
+  };
+
+  const getPriceDiff = (sourceId, itemSlug, currentPrice) => {
+    const history = externalHistory[sourceId]?.[itemSlug];
+    if (!history) return { diff: 0, symbol: '', color: '#888' };
+
+    // Lấy danh sách thời gian, sắp xếp mới nhất lên đầu
+    const timestamps = Object.keys(history).sort((a, b) => b - a);
+    if (timestamps.length < 2) return { diff: 0, symbol: '', color: '#888' };
+
+    // Lấy giá của lần quét ngay trước đó (vị trí index 1)
+    const prevPriceStr = history[timestamps[1]].sell;
+    const curr = parseInt(currentPrice.replace(/[^0-9]/g, '')) || 0;
+    const prev = parseInt(prevPriceStr.replace(/[^0-9]/g, '')) || 0;
+
+    const diff = curr - prev;
+
+    return {
+      diff: Math.abs(diff).toLocaleString('vi-VN'),
+      symbol: diff > 0 ? '▲' : diff < 0 ? '▼' : '—',
+      color: diff > 0 ? '#28a745' : diff < 0 ? '#dc3545' : '#888'
+    };
   };
 
   // --- UI: LOGIN ---
@@ -337,6 +425,98 @@ export default function HomeAdmin() {
               placeholder={isPro ? "Nhập nội dung thông báo..." : "Nâng cấp Premium để tùy chỉnh chữ chạy"}
             />
           </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+          {Object.entries(externalPrices).map(([sourceId, source]) => {
+            const isExpanded = expandedSources[sourceId];
+            const sortedItems = Object.values(source.items || {}).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+            return (
+              <div key={sourceId} style={{
+                background: '#fff', borderRadius: '16px', border: '3px solid #222', // Viền cực đậm
+                boxShadow: '0 10px 20px rgba(0,0,0,0.1)', overflow: 'hidden'
+              }}>
+                {/* HEADER LIVE: Đèn xanh nhấp nháy */}
+                <div onClick={() => toggleExpand(sourceId)} style={{
+                  padding: '20px 25px', background: isExpanded ? '#000' : '#f8f9fa',
+                  color: isExpanded ? '#fff' : '#000', cursor: 'pointer',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{
+                      width: '15px', height: '15px', background: '#28a745', borderRadius: '50%',
+                      boxShadow: '0 0 12px #28a745', animation: 'pulse 1.5s infinite'
+                    }}></div>
+                    <strong style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>{source.name}</strong>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '12px', opacity: 0.7, fontWeight: 'bold' }}>CẬP NHẬT LẦN CUỐI</div>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                        {sortedItems[0] ? new Date(sortedItems[0].updatedAt).toLocaleTimeString('vi-VN') : '--:--'}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '28px' }}>{isExpanded ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+
+                {/* BẢNG GIÁ CHI TIẾT */}
+                {isExpanded && (
+                  <div style={{ borderTop: '3px solid #222' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                      <thead style={{ background: '#333', color: '#fff' }}>
+                        <tr>
+                          <th style={{ padding: '15px', textAlign: 'left', width: '40%', fontSize: '16px' }}>LOẠI VÀNG</th>
+                          <th style={{ padding: '15px', textAlign: 'center', fontSize: '16px' }}>MUA VÀO</th>
+                          <th style={{ padding: '15px', textAlign: 'center', fontSize: '16px' }}>BÁN RA</th>
+                        </tr>
+                      </thead>
+                      <tbody style={{ filter: isPro ? 'none' : 'blur(8px)' }}>
+                        {sortedItems.map((item, idx) => {
+                          const buyChange = getPriceDiff(sourceId, item.label.toLowerCase().replace(/[^a-z0-9]/g, '_'), item.buy);
+                          const sellChange = getPriceDiff(sourceId, item.label.toLowerCase().replace(/[^a-z0-9]/g, '_'), item.sell);
+                          const isJustUpdated = (Date.now() - item.updatedAt) < 60000;
+
+                          return (
+                            <tr key={idx} className={isJustUpdated ? 'flash-live' : ''} style={{
+                              borderBottom: '2px solid #eee',
+                              background: idx % 2 === 0 ? '#fff' : '#fcfcfc'
+                            }}>
+                              {/* TÊN VÀNG */}
+                              <td style={{
+                                padding: '25px 20px', fontSize: '20px', fontWeight: '900', color: '#000',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                              }}>
+                                {item.label}
+                              </td>
+
+                              {/* GIÁ MUA */}
+                              <td style={{ padding: '20px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '26px', fontWeight: '900', color: '#000' }}>{item.buy}</div>
+                                <div style={{ fontSize: '14px', color: buyChange.color, fontWeight: 'bold', marginTop: '4px' }}>
+                                  {buyChange.symbol} {buyChange.diff !== '0' ? buyChange.diff : ''}
+                                </div>
+                              </td>
+
+                              {/* GIÁ BÁN */}
+                              <td style={{ padding: '20px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '26px', fontWeight: '900', color: '#d00' }}>{item.sell}</div>
+                                <div style={{ fontSize: '14px', color: sellChange.color, fontWeight: 'bold', marginTop: '4px' }}>
+                                  {sellChange.symbol} {sellChange.diff !== '0' ? sellChange.diff : ''}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* KHỐI 2: CẬP NHẬT GIÁ (Giới hạn 4 dòng cho bản Free) */}
@@ -482,6 +662,17 @@ export default function HomeAdmin() {
         {/* ADMIN ONLY */}
         {user?.uid === ADMIN_UID && (
           <button onClick={() => window.location.href = '/admintemplate'} style={{ padding: '15px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>⚙️ QUẢN LÝ KHO TEMPLATE (ADMIN ONLY)</button>
+        )}
+        {user?.uid === ADMIN_UID && (
+          <div style={{ marginTop: '20px', padding: '15px', background: '#000', borderRadius: '8px', textAlign: 'center' }}>
+            <p style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '13px' }}>🛠 Khu vực quản trị hệ thống</p>
+            <button
+              onClick={() => window.location.href = '/crawler'}
+              style={{ padding: '10px 20px', background: '#ffc107', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              🤖 QUẢN LÝ ROBOT CRAWLER
+            </button>
+          </div>
         )}
       </div>
     </div>

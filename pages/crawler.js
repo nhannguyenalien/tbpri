@@ -3,7 +3,9 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, update, set, onValue, remove } from 'firebase/database';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
-// 1. CẤU HÌNH FIREBASE (Dữ liệu của ông)
+// ======================
+// 🔥 FIREBASE CONFIG
+// ======================
 const firebaseConfig = {
     apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
     authDomain: "pricegold-4925d.firebaseapp.com",
@@ -19,16 +21,30 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2";
 
-// MẪU JSON MẶC ĐỊNH
+// ======================
+// 📦 TEMPLATE (HTML + API)
+// ======================
 const JSON_TEMPLATE = {
-  "id_tiem_vang": {
-    "name": "Tên Tiệm Vàng",
+  "html_example": {
+    "name": "Tiệm vàng (HTML)",
     "url": "https://link-web-vang.com",
     "enabled": true,
     "row_selector": "table tr:has(td)",
     "name_selector": "td:nth-child(1)",
     "buy_selector": "td:nth-child(2)",
     "sell_selector": "td:nth-child(3)"
+  },
+  "api_example": {
+    "name": "Tiệm vàng (API)",
+    "enabled": true,
+    "type": "api",
+    "api_url": "https://api.example.com/gold",
+    "mapping": {
+      "name": "type",
+      "buy": "buy",
+      "sell": "sell"
+    },
+    "unit": "x1000"
   }
 };
 
@@ -43,13 +59,17 @@ export default function CrawlerManager() {
       setUser(currentUser);
       setLoading(false);
       if (currentUser && currentUser.uid === ADMIN_UID) {
-        onValue(ref(db, 'crawler_configs'), (s) => setCrawlerConfigs(s.exists() ? s.val() : {}));
+        onValue(ref(db, 'crawler_configs'), (s) => {
+          setCrawlerConfigs(s.exists() ? s.val() : {});
+        });
       }
     });
     return () => unsubAuth();
   }, []);
 
-  // --- HÀM XỬ LÝ CHÍNH ---
+  // ======================
+  // 🧠 HANDLERS
+  // ======================
 
   const handleAddTemplate = () => {
     setJsonInput(JSON.stringify(JSON_TEMPLATE, null, 2));
@@ -58,132 +78,162 @@ export default function CrawlerManager() {
   const handleSaveJson = () => {
     try {
       const parsedData = JSON.parse(jsonInput);
-      Object.keys(parsedData).forEach(key => {
-        set(ref(db, `crawler_configs/${key}`), parsedData[key]);
+
+      Object.entries(parsedData).forEach(([key, cfg]) => {
+
+        // 🔴 Validate API
+        if (cfg.type === "api") {
+          if (!cfg.api_url || !cfg.mapping) {
+            throw new Error(`Config ${key} thiếu api_url hoặc mapping`);
+          }
+        }
+
+        // 🟢 Validate HTML
+        if (!cfg.type) {
+          if (!cfg.url) {
+            throw new Error(`Config ${key} thiếu url`);
+          }
+        }
+
+        set(ref(db, `crawler_configs/${key}`), cfg);
       });
+
       alert("✅ Lưu cấu hình thành công!");
       setJsonInput("");
+
     } catch (e) {
-      alert("❌ Lỗi: Định dạng JSON không chuẩn. Kiểm tra lại dấu ngoặc/phẩy.");
+      alert("❌ Lỗi: " + e.message);
     }
   };
 
-  // HÀM XÓA TỔNG LỰC (Xóa Config + Giá Live + Lịch sử)
   const handleDeleteConfig = async (id, name) => {
-    const confirmMsg = `⚠️ BẠN CÓ CHẮC CHẮN MUỐN XÓA TIỆM: ${name || id}?\n\nHành động này sẽ xóa sạch cấu hình, bảng giá tham khảo và lịch sử biểu đồ của tiệm này.`;
-    
+    const confirmMsg = `⚠️ XÓA TIỆM: ${name || id}?\n\nXóa toàn bộ dữ liệu!`;
+
     if (window.confirm(confirmMsg)) {
       try {
-        // 1. Xóa cấu hình
         await remove(ref(db, `crawler_configs/${id}`));
-        // 2. Xóa giá đang hiển thị
         await remove(ref(db, `external_prices/sources/${id}`));
-        // 3. Xóa lịch sử biểu đồ
         await remove(ref(db, `external_history/${id}`));
-        
-        alert("🗑️ Đã xóa sạch dữ liệu khỏi hệ thống!");
+
+        alert("🗑️ Đã xóa sạch!");
       } catch (err) {
-        alert("❌ Lỗi khi xóa: " + err.message);
+        alert("❌ Lỗi: " + err.message);
       }
     }
   };
 
-  if (loading) return <div style={{padding: '50px', textAlign: 'center', color: '#fff', background: '#1e1e1e', minHeight: '100vh'}}>Đang kiểm tra quyền...</div>;
-  if (!user || user.uid !== ADMIN_UID) return <div style={{padding: '50px', textAlign: 'center', color: 'red', background: '#1e1e1e', minHeight: '100vh'}}>🚫 Truy cập bị từ chối</div>;
+  // ======================
+  // 🔐 AUTH GUARD
+  // ======================
+  if (loading) return <div style={pageStyle}>Đang kiểm tra quyền...</div>;
+  if (!user || user.uid !== ADMIN_UID) return <div style={pageStyle}>🚫 Truy cập bị từ chối</div>;
 
+  // ======================
+  // 🎨 UI
+  // ======================
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'monospace', background: '#1e1e1e', color: '#d4d4d4', minHeight: '100vh' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', borderBottom: '1px solid #333', paddingBottom: '15px' }}>
+    <div style={containerStyle}>
+      <header style={headerStyle}>
         <div>
           <h2 style={{color: '#61dafb', margin: 0}}>🛠️ JSON CRAWLER EDITOR</h2>
-          <p style={{fontSize: '12px', color: '#888'}}>Quản lý Robot quét giá thị trường</p>
+          <p style={{fontSize: '12px', color: '#888'}}>Quản lý Robot quét giá</p>
         </div>
-        <button onClick={() => window.location.href = '/'} style={{padding: '10px 20px', cursor: 'pointer', background: '#333', color: '#fff', border: '1px solid #555', borderRadius: '5px'}}>Về Dashboard</button>
+        <button onClick={() => window.location.href = '/'} style={btnStyle}>Dashboard</button>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '30px' }}>
-        
-        {/* CỘT TRÁI: EDITOR */}
+      <div style={gridStyle}>
+
+        {/* EDITOR */}
         <div>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <button onClick={handleAddTemplate} style={btnStyle}>➕ Thêm Mẫu Mới</button>
-            <button onClick={handleSaveJson} style={{ ...btnStyle, background: '#28a745' }}>💾 Lưu Cấu Hình</button>
+            <button onClick={handleAddTemplate} style={btnStyle}>➕ Template</button>
+            <button onClick={handleSaveJson} style={{ ...btnStyle, background: '#28a745' }}>💾 Save</button>
           </div>
-          
+
           <textarea
             value={jsonInput}
             onChange={(e) => setJsonInput(e.target.value)}
-            placeholder="// Dán JSON cấu hình tiệm vàng vào đây..."
-            style={{
-              width: '100%',
-              height: '450px',
-              background: '#252526',
-              color: '#9cdcfe',
-              padding: '15px',
-              border: '1px solid #3c3c3c',
-              borderRadius: '5px',
-              fontSize: '14px',
-              lineHeight: '1.5',
-              outline: 'none',
-              fontFamily: 'Consolas, monospace'
-            }}
+            placeholder="// Dán JSON vào đây..."
+            style={textareaStyle}
           />
         </div>
 
-        {/* CỘT PHẢI: DANH SÁCH SOURCE HIỆN TẠI */}
+        {/* LIST */}
         <div>
-          <h3 style={{marginTop: 0, color: '#ce9178'}}>📡 Nguồn đã lưu ({Object.keys(crawlerConfigs).length})</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', maxHeight: '500px', overflowY: 'auto', paddingRight: '5px' }}>
+          <h3 style={{color: '#ce9178'}}>📡 Sources ({Object.keys(crawlerConfigs).length})</h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {Object.entries(crawlerConfigs).map(([id, cfg]) => (
-              <div key={id} style={{ 
-                background: '#2d2d2d', 
-                padding: '15px', 
-                borderRadius: '8px', 
-                borderLeft: `4px solid ${cfg.enabled ? '#28a745' : '#dc3545'}`,
-                fontSize: '13px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div key={id} style={cardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <strong style={{color: '#4ec9b0'}}>{id}</strong>
-                  <div style={{display: 'flex', gap: '8px'}}>
+                  <div>
                     <button onClick={() => setJsonInput(JSON.stringify({ [id]: cfg }, null, 2))} style={miniBtn}>Sửa</button>
                     <button onClick={() => handleDeleteConfig(id, cfg.name)} style={{ ...miniBtn, color: '#f44336' }}>Xóa</button>
                   </div>
                 </div>
-                <div style={{color: '#ce9178', fontWeight: 'bold'}}>{cfg.name}</div>
-                <div style={{fontSize: '11px', color: '#666', marginTop: '5px', wordBreak: 'break-all'}}>{cfg.url}</div>
+
+                <div style={{color: '#ce9178'}}>{cfg.name}</div>
+
+                <div style={{fontSize: '11px', color: '#888'}}>
+                  {cfg.type === 'api' ? '⚡ API' : '🌐 HTML'}
+                </div>
+
+                <div style={{fontSize: '11px', color: '#666', wordBreak: 'break-all'}}>
+                  {cfg.url || cfg.api_url}
+                </div>
               </div>
             ))}
           </div>
         </div>
 
       </div>
-
-      <footer style={{marginTop: '50px', borderTop: '1px solid #333', paddingTop: '20px', fontSize: '12px', color: '#555'}}>
-        * Lưu ý: Khi xóa tiệm, tất cả dữ liệu lịch sử liên quan sẽ biến mất vĩnh viễn.
-      </footer>
     </div>
   );
 }
 
-// STYLES
-const btnStyle = { 
-  padding: '12px 20px', 
-  cursor: 'pointer', 
-  border: 'none', 
-  borderRadius: '4px', 
-  background: '#007acc', 
-  color: '#fff', 
-  fontWeight: 'bold',
-  transition: '0.2s',
-  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+// ======================
+// 🎨 STYLES
+// ======================
+const pageStyle = { padding: 50, textAlign: 'center', background: '#1e1e1e', color: '#fff', minHeight: '100vh' };
+
+const containerStyle = { padding: 20, maxWidth: 1200, margin: '0 auto', fontFamily: 'monospace', background: '#1e1e1e', color: '#d4d4d4', minHeight: '100vh' };
+
+const headerStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: 30 };
+
+const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 350px', gap: 30 };
+
+const textareaStyle = {
+  width: '100%',
+  height: 450,
+  background: '#252526',
+  color: '#9cdcfe',
+  padding: 15,
+  borderRadius: 5,
+  fontFamily: 'monospace'
 };
 
-const miniBtn = { 
-  background: '#3e3e3e', 
-  border: 'none', 
-  color: '#569cd6', 
-  cursor: 'pointer', 
-  fontSize: '11px', 
-  padding: '4px 8px',
-  borderRadius: '3px'
+const cardStyle = {
+  background: '#2d2d2d',
+  padding: 12,
+  borderRadius: 6
+};
+
+const btnStyle = {
+  padding: '10px 16px',
+  background: '#007acc',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 4,
+  cursor: 'pointer'
+};
+
+const miniBtn = {
+  marginLeft: 5,
+  background: '#3e3e3e',
+  border: 'none',
+  color: '#569cd6',
+  cursor: 'pointer',
+  fontSize: 11,
+  padding: '4px 8px'
 };

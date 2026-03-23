@@ -67,6 +67,30 @@ const PremiumGate = ({ isPro, children, message = "Nâng cấp Premium" }) => {
   );
 };
 
+// Định nghĩa các biến Style để giao diện nhìn sạch đẹp
+const ruleRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '15px',
+  background: '#f9f9f9',
+  padding: '12px 20px',
+  borderRadius: '10px',
+  border: '1px solid #eee',
+  fontSize: '16px',
+  color: '#333'
+};
+
+const ruleInputStyle = {
+  padding: '8px 12px',
+  width: '120px',
+  border: '2px solid #007acc',
+  borderRadius: '6px',
+  fontWeight: 'bold',
+  fontSize: '16px',
+  textAlign: 'center',
+  outline: 'none'
+};
+
 export default function HomeAdmin() {
   const [user, setUser] = useState(null);
   const [boardData, setBoardData] = useState(null);
@@ -88,6 +112,17 @@ export default function HomeAdmin() {
 
   const [expandedSources, setExpandedSources] = useState({});
   const [searchTerm, setSearchTerm] = useState(""); // Để tìm kiếm tiệm
+
+  const formatVND = (val) => {
+    if (val === undefined || val === null || val === "") return "";
+    return val.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+
+  // 2. Xóa dấu chấm để lấy số thuần túy (Vd: 19.000.000 -> 19000000)
+  const parseVND = (val) => {
+    if (typeof val !== 'string') return val;
+    return val.replace(/\./g, "");
+  };
 
   const toggleExpand = (id) => {
     setExpandedSources(prev => ({ ...prev, [id]: !prev[id] }));
@@ -455,7 +490,7 @@ export default function HomeAdmin() {
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '12px', opacity: 0.7, fontWeight: 'bold' }}>CẬP NHẬT LẦN CUỐI</div>
                       <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                        {sortedItems[0] ? new Date(sortedItems[0].updatedAt).toLocaleTimeString('vi-VN') : '--:--'}
+                        {sortedItems[0] ? new Date(sortedItems[0].updatedAt).toLocaleString('vi-VN') : '--:--'}
                       </div>
                     </div>
                     <span style={{ fontSize: '28px' }}>{isExpanded ? '▲' : '▼'}</span>
@@ -519,41 +554,78 @@ export default function HomeAdmin() {
           })}
         </div>
 
-        {/* KHỐI 2: CẬP NHẬT GIÁ (Giới hạn 4 dòng cho bản Free) */}
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-          <h3 style={{ marginTop: 0, fontSize: '16px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>💰 Bảng giá hiện tại</h3>
+
+
+        {/* KHỐI 2: CẬP NHẬT GIÁ (Tự động thêm dấu chấm phần ngàn) */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #333' }}>
+          <h3 style={{ marginTop: 0, fontSize: '18px', borderBottom: '2px solid #eee', paddingBottom: '12px' }}>
+            💰 Bảng giá hôm nay (Số to - Có dấu chấm)
+          </h3>
+
           {(boardData?.prices || []).map((p, i) => (
-            <div key={i} style={{ marginBottom: '15px', padding: '10px', background: '#fcfcfc', border: '1px solid #f0f0f0', borderRadius: '6px' }}>
-              <input type="text" value={p.name} onChange={(e) => {
-                const newP = [...boardData.prices]; newP[i].name = e.target.value; handleUpdate('prices', newP);
-              }} style={{ width: '100%', fontWeight: 'bold', border: 'none', background: 'transparent', marginBottom: '5px', fontSize: '15px' }} />
-              <div style={{ display: 'flex', gap: '10px' }}>
+            <div key={i} style={{ marginBottom: '20px', padding: '15px', background: '#fdfdfd', border: '1px solid #ccc', borderRadius: '10px' }}>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <input
+                  type="text"
+                  value={p.name}
+                  onChange={(e) => {
+                    const newP = [...boardData.prices]; newP[i].name = e.target.value; handleUpdate('prices', newP);
+                  }}
+                  style={{ width: '80%', fontWeight: '900', border: 'none', background: 'transparent', fontSize: '20px', color: '#000' }}
+                />
+                <button onClick={() => handleUpdate('prices', boardData.prices.filter((_, idx) => idx !== i))} style={{ color: 'red', border: '1px solid red', background: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer' }}>Xóa</button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px' }}>
+                {/* MUA VÀO */}
                 <div style={{ flex: 1 }}>
-                  <small style={{ color: 'green' }}>MUA VÀO</small>
-                  <input type="number" value={p.mua} onChange={(e) => {
-                    const newP = [...boardData.prices]; newP[i].mua = e.target.value; handleUpdate('prices', newP);
-                  }} style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', color: 'green', fontWeight: 'bold' }} />
+                  <small style={{ color: 'green', fontWeight: 'bold' }}>MUA VÀO</small>
+                  <input
+                    type="text"
+                    inputMode="numeric" // Hiện bàn phím số trên điện thoại
+                    value={formatVND(p.mua)}
+                    onChange={(e) => {
+                      const rawValue = parseVND(e.target.value);
+                      const newP = [...boardData.prices];
+                      newP[i].mua = rawValue;
+                      handleUpdate('prices', newP);
+                    }}
+                    style={{
+                      width: '100%', padding: '15px 10px', border: '2px solid green', borderRadius: '8px',
+                      color: 'green', fontWeight: '900', fontSize: '26px', textAlign: 'center'
+                    }}
+                  />
                 </div>
+
+                {/* BÁN RA */}
                 <div style={{ flex: 1 }}>
-                  <small style={{ color: 'red' }}>BÁN RA</small>
-                  <input type="number" value={p.ban} onChange={(e) => {
-                    const newP = [...boardData.prices]; newP[i].ban = e.target.value; handleUpdate('prices', newP);
-                  }} style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', color: 'red', fontWeight: 'bold' }} />
+                  <small style={{ color: 'red', fontWeight: 'bold' }}>BÁN RA</small>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatVND(p.ban)}
+                    onChange={(e) => {
+                      const rawValue = parseVND(e.target.value);
+                      const newP = [...boardData.prices];
+                      newP[i].ban = rawValue;
+                      handleUpdate('prices', newP);
+                    }}
+                    style={{
+                      width: '100%', padding: '15px 10px', border: '2px solid red', borderRadius: '8px',
+                      color: 'red', fontWeight: '900', fontSize: '26px', textAlign: 'center'
+                    }}
+                  />
                 </div>
-                <button onClick={() => handleUpdate('prices', boardData.prices.filter((_, idx) => idx !== i))} style={{ alignSelf: 'flex-end', padding: '8px', background: '#fff', color: 'red', border: '1px solid red', borderRadius: '4px', cursor: 'pointer' }}>Xóa</button>
               </div>
             </div>
           ))}
 
-          {/* Logic hiện nút thêm hàng: Pro mở hết, Free dừng ở 4 dòng */}
+          {/* Nút thêm hàng */}
           {(isPro || (boardData?.prices || []).length < 4) ? (
-            <button onClick={() => handleUpdate('prices', [...(boardData?.prices || []), { name: "LOẠI VÀNG MỚI", mua: 0, ban: 0 }])} style={{ width: '100%', padding: '12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>+ THÊM LOẠI VÀNG</button>
+            <button onClick={() => handleUpdate('prices', [...(boardData?.prices || []), { name: "VÀNG MỚI", mua: "", ban: "" }])} style={{ width: '100%', padding: '18px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}>+ THÊM DÒNG GIÁ</button>
           ) : (
-            <div style={{ textAlign: 'center', padding: '10px', color: 'orange', border: '1px dashed orange', borderRadius: '6px', fontSize: '13px' }}>
-              ⚠️ Bản Miễn Phí giới hạn 4 dòng giá. Vui lòng nâng cấp Pro để thêm không giới hạn.
-              <PremiumGate isPro={isPro} message="Click để mở khóa Lịch sử & Tải Excel" />
-            </div>
-
+            <div style={{ textAlign: 'center', padding: '10px', color: 'orange' }}>⚠️ Đã đạt giới hạn 4 dòng</div>
           )}
         </div>
 

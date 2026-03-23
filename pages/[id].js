@@ -3,126 +3,131 @@ import { useEffect, useState, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 
-const firebaseConfig = { 
-  apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
-  authDomain: "pricegold-4925d.firebaseapp.com",
-  databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "pricegold-4925d",
-  storageBucket: "pricegold-4925d.firebasestorage.app",
-  messagingSenderId: "982593294309",
-  appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
+const firebaseConfig = {
+    apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
+    authDomain: "pricegold-4925d.firebaseapp.com",
+    databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "pricegold-4925d",
+    storageBucket: "pricegold-4925d.firebasestorage.app",
+    messagingSenderId: "982593294309",
+    appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getDatabase(app);
 
 export default function TVDisplay() {
-  const router = useRouter();
-  const [data, setData] = useState(null);
-  const [time, setTime] = useState("");
-  const isFirstRender = useRef(true);
-  const currentTemplateId = useRef("");
+    const router = useRouter();
+    const [data, setData] = useState(null);
+    const [time, setTime] = useState("");
+    const isFirstRender = useRef(true);
+    const currentTemplateId = useRef("");
+    const formatVND = (val) => {
+        if (val === undefined || val === null || val === "") return "0";
+        // Chuyển về chuỗi, xóa mọi ký tự lạ, rồi thêm dấu chấm mỗi 3 chữ số
+        return val.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    };
+    // 1. Đồng hồ
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const now = new Date();
+            setTime(now.toLocaleTimeString('vi-VN'));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
 
-  // 1. Đồng hồ
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      setTime(now.toLocaleTimeString('vi-VN'));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    // 2. Lắng nghe dữ liệu Firebase
+    useEffect(() => {
+        // THÊM: Đợi router sẵn sàng để lấy ID (Rất quan trọng cho Tivi)
+        if (!router.isReady) return;
 
-  // 2. Lắng nghe dữ liệu Firebase
-  useEffect(() => {
-    // THÊM: Đợi router sẵn sàng để lấy ID (Rất quan trọng cho Tivi)
-    if (!router.isReady) return;
+        const { id } = router.query;
+        if (!id) return;
 
-    const { id } = router.query;
-    if (!id) return;
+        const boardRef = ref(db, `tv_sessions/${id}`);
+        const unsubscribe = onValue(boardRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const boardData = snapshot.val();
+                setData(boardData);
 
-    const boardRef = ref(db, `tv_sessions/${id}`);
-    const unsubscribe = onValue(boardRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const boardData = snapshot.val();
-        setData(boardData);
-        
-        // SỬA: Nhận thêm marqueeText từ hàm renderBoard
-        const { fullHTML, rowsHtml, marqueeText } = renderBoard(boardData);
+                // SỬA: Nhận thêm marqueeText từ hàm renderBoard
+                const { fullHTML, rowsHtml, marqueeText } = renderBoard(boardData);
 
-        if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
-          const container = document.getElementById('display-board');
-          if (container) container.innerHTML = fullHTML;
-          isFirstRender.current = false;
-          currentTemplateId.current = boardData.template_id;
-        } else {
-          const target = document.querySelector('.price-table tbody') || 
-                         document.querySelector('.grid-container') || 
-                         document.querySelector('.price-table');
-          
-          if (target) target.innerHTML = rowsHtml;
+                if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
+                    const container = document.getElementById('display-board');
+                    if (container) container.innerHTML = fullHTML;
+                    isFirstRender.current = false;
+                    currentTemplateId.current = boardData.template_id;
+                } else {
+                    const target = document.querySelector('.price-table tbody') ||
+                        document.querySelector('.grid-container') ||
+                        document.querySelector('.price-table');
 
-          // Cập nhật chữ chạy Realtime
-          const marqueeTag = document.querySelector('marquee');
-          if (marqueeTag && marqueeTag.innerText !== marqueeText) {
-             marqueeTag.innerText = marqueeText;
-          }
-        }
-      }
-    });
+                    if (target) target.innerHTML = rowsHtml;
 
-    return () => unsubscribe();
-  }, [router.isReady, router.query]); // Theo dõi router
+                    // Cập nhật chữ chạy Realtime
+                    const marqueeTag = document.querySelector('marquee');
+                    if (marqueeTag && marqueeTag.innerText !== marqueeText) {
+                        marqueeTag.innerText = marqueeText;
+                    }
+                }
+            }
+        });
 
-  const renderBoard = (data) => {
-    if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
-    
-    // LOGIC PHÂN CẤP: Kiểm tra gói cước
-    const isPro = data.plan === 'premium';
-    
-    let html = data.html_template || "";
-    let rowT = data.row_template || "";
-    let rowsHtml = "";
-    
-    // Nếu Free: Ép dùng chữ chạy mặc định
-    let mText = isPro ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!") : "Chúc Quý Khách Phát Tài Phát Lộc!";
+        return () => unsubscribe();
+    }, [router.isReady, router.query]); // Theo dõi router
 
-    // Nếu Free: Chỉ lấy tối đa 4 dòng giá đầu tiên
-    const displayPrices = isPro ? (data.prices || []) : (data.prices || []).slice(0, 4);
+    const renderBoard = (data) => {
+        if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
 
-    displayPrices.forEach(p => {
-      rowsHtml += rowT
-        .replace(/{{LOAI_VANG}}/g, p.name || "")
-        .replace(/{{GIA_MUA}}/g, Number(p.mua || 0).toLocaleString('vi-VN'))
-        .replace(/{{GIA_BAN}}/g, Number(p.ban || 0).toLocaleString('vi-VN'));
-    });
+        // LOGIC PHÂN CẤP: Kiểm tra gói cước
+        const isPro = data.plan === 'premium';
 
-    const now = new Date();
-    const dateStr = now.getDate() + "/" + (now.getMonth() + 1) + "/" + now.getFullYear();
+        let html = data.html_template || "";
+        let rowT = data.row_template || "";
+        let rowsHtml = "";
 
-    const fullHTML = html
-      .replace(/{{SHOP_NAME}}/g, data.shop_name || "TIỆM VÀNG")
-      .replace(/{{SHOP_ADDRESS}}/g, data.shop_address || "")
-      .replace(/{{SHOP_PHONE}}/g, data.shop_phone || "")
-      .replace(/{{CURRENT_DATE}}/g, dateStr)
-      .replace(/{{MARQUEE_TEXT}}/g, mText)
-      .replace(/{{PRICE_LIST}}/g, rowsHtml);
+        // Nếu Free: Ép dùng chữ chạy mặc định
+        let mText = isPro ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!") : "Chúc Quý Khách Phát Tài Phát Lộc!";
 
-    return { fullHTML, rowsHtml, marqueeText: mText };
-  };
+        // Nếu Free: Chỉ lấy tối đa 4 dòng giá đầu tiên
+        const displayPrices = isPro ? (data.prices || []) : (data.prices || []).slice(0, 4);
 
-  return (
-    <div >
-      {/* Trình duyệt Tivi cũ không thích dấu ?. nên viết kiểu an toàn */}
-      <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
-      <div id="display-board">
-        <div style={{textAlign:'center', paddingTop:'20%'}}>Đang kết nối bảng giá...</div>
-      </div>
-      <script dangerouslySetInnerHTML={{ __html: `
+        displayPrices.forEach(p => {
+            rowsHtml += rowT
+                .replace(/{{LOAI_VANG}}/g, p.name || "")
+                .replace(/{{GIA_MUA}}/g, formatVND(p.mua)) 
+                .replace(/{{GIA_BAN}}/g, formatVND(p.ban)); 
+        });
+
+        const now = new Date();
+        const dateStr = now.getDate() + "/" + (now.getMonth() + 1) + "/" + now.getFullYear();
+
+        const fullHTML = html
+            .replace(/{{SHOP_NAME}}/g, data.shop_name || "TIỆM VÀNG")
+            .replace(/{{SHOP_ADDRESS}}/g, data.shop_address || "")
+            .replace(/{{SHOP_PHONE}}/g, data.shop_phone || "")
+            .replace(/{{CURRENT_DATE}}/g, dateStr)
+            .replace(/{{MARQUEE_TEXT}}/g, mText)
+            .replace(/{{PRICE_LIST}}/g, rowsHtml);
+
+        return { fullHTML, rowsHtml, marqueeText: mText };
+    };
+
+    return (
+        <div >
+            {/* Trình duyệt Tivi cũ không thích dấu ?. nên viết kiểu an toàn */}
+            <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
+            <div id="display-board">
+                <div style={{ textAlign: 'center', paddingTop: '20%' }}>Đang kết nối bảng giá...</div>
+            </div>
+            <script dangerouslySetInnerHTML={{
+                __html: `
         setInterval(() => {
           const el = document.getElementById('clock');
           if(el) el.innerText = new Date().toLocaleTimeString('vi-VN');
         }, 1000);
       `}} />
-    </div>
-  );
+        </div>
+    );
 }

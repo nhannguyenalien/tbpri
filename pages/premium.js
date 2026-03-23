@@ -41,31 +41,35 @@ export default function PremiumPage() {
   const isPro = boardData?.plan === 'premium';
   const shortUid = user?.uid.slice(0, 8).toUpperCase() || "";
 
-  // Bảng giá theo yêu cầu mới của Quân
+  // Bảng giá mới cập nhật theo yêu cầu
   const plans = [
     { 
+      id: 'day', 
+      code: 'D', 
+      label: 'Gói Ngày (Dùng thử)', 
+      amount: 50000, 
+      desc: 'Trải nghiệm đầy đủ tính năng trong 24h', 
+      color: '#6c757d' 
+    },
+    { 
       id: 'month', 
+      code: 'M',
       label: 'Gói 1 Tháng', 
-      amount: 300000, 
-      desc: 'Dành cho tiệm vàng trải nghiệm (300.000đ/tháng)', 
+      amount: 700000, 
+      desc: 'Phù hợp nhu cầu ngắn hạn (700.000đ/tháng)', 
       color: '#007acc' 
     },
     { 
-      id: 'year1', 
-      label: 'Gói 1 Năm (Tiết kiệm)', 
-      amount: 3360000, 
-      desc: 'Chỉ còn 280.000đ/tháng - Đã giảm 240k', 
+      id: 'year', 
+      code: 'Y',
+      label: 'Gói 1 Năm (Siêu Tiết Kiệm)', 
+      amount: 5880000, // 490.000 * 12
+      desc: 'Chỉ còn 490.000đ/tháng - Tiết kiệm 2.520.000đ/năm', 
       color: '#28a745' 
     },
     { 
-      id: 'year2', 
-      label: 'Gói 2 Năm (Giá tốt nhất)', 
-      amount: 6000000, 
-      desc: 'Chỉ còn 250.000đ/tháng - Đã giảm 1.2 triệu', 
-      color: '#6f42c1' 
-    },
-    { 
       id: 'custom', 
+      code: 'C',
       label: '🎨 Thiết Kế Riêng (VIP)', 
       amount: 1000000, 
       desc: 'Phí thiết kế giao diện độc quyền (Thanh toán 1 lần)', 
@@ -73,11 +77,12 @@ export default function PremiumPage() {
     },
   ];
 
-  const getQRUrl = (amount) => {
+  // Hàm tạo QR Code (Đã thêm mã gói vào memo để hệ thống tự động nhận diện tốt hơn)
+  const getQRUrl = (plan) => {
     const STK = "9704229244878273"; 
     const BANK = "MB"; 
-    const memo = `GP ${shortUid}`;
-    return `https://img.vietqr.io/image/${BANK}-${STK}-compact.png?amount=${amount}&addInfo=${memo}&accountName=NGUYEN%20HUU%20NHAN`;
+    const memo = `GP ${plan.code} ${shortUid}`;
+    return `https://img.vietqr.io/image/${BANK}-${STK}-compact.png?amount=${plan.amount}&addInfo=${memo}&accountName=NGUYEN%20HUU%20NHAN`;
   };
 
   if (loading) return <div style={{padding:'50px', textAlign:'center'}}>Đang kết nối hệ thống...</div>;
@@ -135,12 +140,12 @@ export default function PremiumPage() {
             {selectedPlan === plan.id && (
               <div style={{ padding: '25px', textAlign: 'center', background: '#fff' }}>
                 <img 
-                  src={getQRUrl(plan.amount)} 
+                  src={getQRUrl(plan)} 
                   alt="QR Code" 
                   style={{ width: '100%', maxWidth: '280px', borderRadius: '12px', marginBottom: '15px' }} 
                 />
                 <div style={{ background: '#f8f9fa', padding: '10px', borderRadius: '8px', fontSize: '13px', color: '#444' }}>
-                  Nội dung chuyển khoản: <strong style={{color: '#d32f2f'}}>GP {shortUid}</strong>
+                  Nội dung chuyển khoản: <strong style={{color: '#d32f2f'}}>GP {plan.code} {shortUid}</strong>
                 </div>
                 <p style={{fontSize: '12px', color: '#888', marginTop: '15px'}}>
                     * Hệ thống tự động mở khóa sau khi nhận tiền.<br/>

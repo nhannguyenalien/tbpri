@@ -21,8 +21,23 @@ export default function TVDisplay() {
     const router = useRouter();
     const [data, setData] = useState(null);
     const [time, setTime] = useState("");
-    const [zoom, setZoom] = useState(1); // Mặc định là 100% (zoom = 1)
     
+    // --- LOGIC ZOOM & CACHE ---
+    const [zoom, setZoom] = useState(1);
+
+    // Load zoom từ bộ nhớ khi vừa mở trang
+    useEffect(() => {
+        const savedZoom = localStorage.getItem('tv_zoom_level');
+        if (savedZoom) {
+            setZoom(parseFloat(savedZoom));
+        }
+    }, []);
+
+    // Lưu zoom vào bộ nhớ mỗi khi thay đổi
+    useEffect(() => {
+        localStorage.setItem('tv_zoom_level', zoom.toString());
+    }, [zoom]);
+
     const isFirstRender = useRef(true);
     const currentTemplateId = useRef("");
 
@@ -56,12 +71,14 @@ export default function TVDisplay() {
 
                 const { fullHTML, rowsHtml, marqueeText } = renderBoard(boardData);
 
+                // Nếu đổi Template hoặc lần đầu load: Thay toàn bộ HTML
                 if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
                     const container = document.getElementById('display-board');
                     if (container) container.innerHTML = fullHTML;
                     isFirstRender.current = false;
                     currentTemplateId.current = boardData.template_id;
                 } else {
+                    // Nếu chỉ cập nhật giá: Chỉ thay phần tbody/rows để tránh lag
                     const target = document.querySelector('.price-table tbody') ||
                         document.querySelector('.grid-container') ||
                         document.querySelector('.price-table');
@@ -79,7 +96,7 @@ export default function TVDisplay() {
         return () => unsubscribe();
     }, [router.isReady, router.query]);
 
-    // 3. Logic Render Board (Giữ nguyên logic cũ của bạn)
+    // 3. Logic Render Board (Giữ nguyên logic của bạn)
     const renderBoard = (data) => {
         if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
 
@@ -117,8 +134,8 @@ export default function TVDisplay() {
         width: '45px',
         height: '45px',
         borderRadius: '50%',
-        border: '2px solid rgba(255,255,255,0.5)',
-        background: 'rgba(0,0,0,0.5)',
+        border: '2px solid rgba(255,255,255,0.4)',
+        background: 'rgba(0,0,0,0.6)',
         color: '#fff',
         fontSize: '24px',
         fontWeight: 'bold',
@@ -126,47 +143,49 @@ export default function TVDisplay() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        outline: 'none'
+        outline: 'none',
+        transition: 'all 0.2s'
     };
 
     return (
-        <div style={{ background: '#000', minHeight: '100vh', overflow: 'hidden', position: 'relative' }}>
+        <div style={{  }}>
             
-            {/* --- THANH ĐIỀU KHIỂN ZOOM (Góc trên bên phải) --- */}
+            {/* --- BỘ ĐIỀU KHIỂN ZOOM (Ghi nhớ tự động) --- */}
             <div style={{ 
                 position: 'fixed', 
-                top: '20px', 
-                right: '20px', 
+                top: '25px', 
+                right: '25px', 
                 zIndex: 9999, 
                 display: 'flex', 
                 flexDirection: 'column',
-                gap: '15px',
-                opacity: 0.2, // Để mờ tránh che bảng giá, đưa chuột vào mới hiện rõ
-                transition: 'opacity 0.3s'
+                gap: '12px',
+                opacity: 0.1, // Mặc định rất mờ để không làm phiền khách xem giá
+                transition: 'opacity 0.4s'
             }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1} 
-               onMouseLeave={(e) => e.currentTarget.style.opacity = 0.2}>
+               onMouseLeave={(e) => e.currentTarget.style.opacity = 0.1}>
                 
-                <button title="Phóng to" onClick={() => setZoom(prev => Math.min(prev + 0.05, 2))} style={controlBtnStyle}>+</button>
-                <button title="Thu nhỏ" onClick={() => setZoom(prev => Math.max(prev - 0.05, 0.5))} style={controlBtnStyle}>-</button>
-                <button title="Về mặc định" onClick={() => setZoom(1)} style={{...controlBtnStyle, fontSize: '12px'}}>100%</button>
+                <button title="Phóng to" onClick={() => setZoom(z => Math.min(z + 0.05, 3))} style={controlBtnStyle}>+</button>
+                <button title="Thu nhỏ" onClick={() => setZoom(z => Math.max(z - 0.05, 0.3))} style={controlBtnStyle}>-</button>
+                <button title="Mặc định" onClick={() => { setZoom(1); localStorage.removeItem('tv_zoom_level'); }} 
+                        style={{...controlBtnStyle, fontSize: '11px'}}>100%</button>
             </div>
 
             {/* CSS Template từ Database */}
             <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
             
-            {/* --- NỘI DUNG BẢNG GIÁ (Áp dụng Zoom tại đây) --- */}
+            {/* --- VÙNG HIỂN THỊ CHÍNH (Áp dụng Zoom & Cache) --- */}
             <div id="display-board" style={{ 
                 zoom: zoom, 
-                WebkitZoom: zoom, // Hỗ trợ một số trình duyệt Tivi cũ
+                WebkitZoom: zoom, // Hỗ trợ Smart TV đời cũ (Tizen, WebOS)
                 transformOrigin: 'top center',
-                transition: 'zoom 0.2s ease-in-out'
+                transition: 'zoom 0.15s ease-out'
             }}>
                 <div style={{ textAlign: 'center', paddingTop: '20%', color: '#fff', fontFamily: 'sans-serif' }}>
                     Đang kết nối bảng giá...
                 </div>
             </div>
 
-            {/* Script hỗ trợ Clock trong Template HTML */}
+            {/* Script hỗ trợ Clock cho các thẻ có id="clock" trong HTML Template */}
             <script dangerouslySetInnerHTML={{
                 __html: `
                     setInterval(() => {

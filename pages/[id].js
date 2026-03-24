@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 
+// 1. Cấu hình Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
     authDomain: "pricegold-4925d.firebaseapp.com",
@@ -20,14 +21,18 @@ export default function TVDisplay() {
     const router = useRouter();
     const [data, setData] = useState(null);
     const [time, setTime] = useState("");
+    const [zoom, setZoom] = useState(1); // Mặc định là 100% (zoom = 1)
+    
     const isFirstRender = useRef(true);
     const currentTemplateId = useRef("");
+
+    // Hàm định dạng số có dấu chấm
     const formatVND = (val) => {
         if (val === undefined || val === null || val === "") return "0";
-        // Chuyển về chuỗi, xóa mọi ký tự lạ, rồi thêm dấu chấm mỗi 3 chữ số
         return val.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     };
-    // 1. Đồng hồ
+
+    // 1. Đồng hồ cập nhật mỗi giây
     useEffect(() => {
         const timer = setInterval(() => {
             const now = new Date();
@@ -36,9 +41,8 @@ export default function TVDisplay() {
         return () => clearInterval(timer);
     }, []);
 
-    // 2. Lắng nghe dữ liệu Firebase
+    // 2. Lắng nghe dữ liệu Firebase Realtime
     useEffect(() => {
-        // THÊM: Đợi router sẵn sàng để lấy ID (Rất quan trọng cho Tivi)
         if (!router.isReady) return;
 
         const { id } = router.query;
@@ -50,7 +54,6 @@ export default function TVDisplay() {
                 const boardData = snapshot.val();
                 setData(boardData);
 
-                // SỬA: Nhận thêm marqueeText từ hàm renderBoard
                 const { fullHTML, rowsHtml, marqueeText } = renderBoard(boardData);
 
                 if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
@@ -65,7 +68,6 @@ export default function TVDisplay() {
 
                     if (target) target.innerHTML = rowsHtml;
 
-                    // Cập nhật chữ chạy Realtime
                     const marqueeTag = document.querySelector('marquee');
                     if (marqueeTag && marqueeTag.innerText !== marqueeText) {
                         marqueeTag.innerText = marqueeText;
@@ -75,22 +77,18 @@ export default function TVDisplay() {
         });
 
         return () => unsubscribe();
-    }, [router.isReady, router.query]); // Theo dõi router
+    }, [router.isReady, router.query]);
 
+    // 3. Logic Render Board (Giữ nguyên logic cũ của bạn)
     const renderBoard = (data) => {
         if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
 
-        // LOGIC PHÂN CẤP: Kiểm tra gói cước
         const isPro = data.plan === 'premium';
-
         let html = data.html_template || "";
         let rowT = data.row_template || "";
         let rowsHtml = "";
 
-        // Nếu Free: Ép dùng chữ chạy mặc định
         let mText = isPro ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!") : "Chúc Quý Khách Phát Tài Phát Lộc!";
-
-        // Nếu Free: Chỉ lấy tối đa 4 dòng giá đầu tiên
         const displayPrices = isPro ? (data.prices || []) : (data.prices || []).slice(0, 4);
 
         displayPrices.forEach(p => {
@@ -114,20 +112,69 @@ export default function TVDisplay() {
         return { fullHTML, rowsHtml, marqueeText: mText };
     };
 
+    // Style cho các nút điều khiển Zoom
+    const controlBtnStyle = {
+        width: '45px',
+        height: '45px',
+        borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.5)',
+        background: 'rgba(0,0,0,0.5)',
+        color: '#fff',
+        fontSize: '24px',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        outline: 'none'
+    };
+
     return (
-        <div >
-            {/* Trình duyệt Tivi cũ không thích dấu ?. nên viết kiểu an toàn */}
-            <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
-            <div id="display-board">
-                <div style={{ textAlign: 'center', paddingTop: '20%' }}>Đang kết nối bảng giá...</div>
+        <div style={{ background: '#000', minHeight: '100vh', overflow: 'hidden', position: 'relative' }}>
+            
+            {/* --- THANH ĐIỀU KHIỂN ZOOM (Góc trên bên phải) --- */}
+            <div style={{ 
+                position: 'fixed', 
+                top: '20px', 
+                right: '20px', 
+                zIndex: 9999, 
+                display: 'flex', 
+                flexDirection: 'column',
+                gap: '15px',
+                opacity: 0.2, // Để mờ tránh che bảng giá, đưa chuột vào mới hiện rõ
+                transition: 'opacity 0.3s'
+            }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1} 
+               onMouseLeave={(e) => e.currentTarget.style.opacity = 0.2}>
+                
+                <button title="Phóng to" onClick={() => setZoom(prev => Math.min(prev + 0.05, 2))} style={controlBtnStyle}>+</button>
+                <button title="Thu nhỏ" onClick={() => setZoom(prev => Math.max(prev - 0.05, 0.5))} style={controlBtnStyle}>-</button>
+                <button title="Về mặc định" onClick={() => setZoom(1)} style={{...controlBtnStyle, fontSize: '12px'}}>100%</button>
             </div>
+
+            {/* CSS Template từ Database */}
+            <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
+            
+            {/* --- NỘI DUNG BẢNG GIÁ (Áp dụng Zoom tại đây) --- */}
+            <div id="display-board" style={{ 
+                zoom: zoom, 
+                WebkitZoom: zoom, // Hỗ trợ một số trình duyệt Tivi cũ
+                transformOrigin: 'top center',
+                transition: 'zoom 0.2s ease-in-out'
+            }}>
+                <div style={{ textAlign: 'center', paddingTop: '20%', color: '#fff', fontFamily: 'sans-serif' }}>
+                    Đang kết nối bảng giá...
+                </div>
+            </div>
+
+            {/* Script hỗ trợ Clock trong Template HTML */}
             <script dangerouslySetInnerHTML={{
                 __html: `
-        setInterval(() => {
-          const el = document.getElementById('clock');
-          if(el) el.innerText = new Date().toLocaleTimeString('vi-VN');
-        }, 1000);
-      `}} />
+                    setInterval(() => {
+                        const el = document.getElementById('clock');
+                        if(el) el.innerText = new Date().toLocaleTimeString('vi-VN');
+                    }, 1000);
+                `}} 
+            />
         </div>
     );
 }

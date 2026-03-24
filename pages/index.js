@@ -21,29 +21,127 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2"; // UID Admin của Nhan
 
-const MiniChart = ({ data, color = "#007acc" }) => {
-  if (!data || data.length < 2) return <div style={{ height: '40px', color: '#ccc', fontSize: '10px', display: 'flex', alignItems: 'center' }}>Đang thu thập dữ liệu...</div>;
+const TradingViewChart = ({ data }) => {
+  const [hoverIndex, setHoverIndex] = useState(null);
+  const svgRef = useRef(null);
 
-  const points = data.map(d => parseFloat(d.sell.replace(/[^0-9]/g, ''))); // Lấy giá bán để vẽ
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const width = 100;
-  const height = 30;
+  if (!data || data.length < 2) return null;
 
-  // Tính toán tọa độ các điểm trên SVG
-  const pathData = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
-    const y = height - ((p - min) / range) * height;
-    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-  }).join(' ');
+  const buyPoints = data.map(d => parseFloat(String(d.buy || 0).replace(/[^0-9]/g, '')));
+  const sellPoints = data.map(d => parseFloat(String(d.sell || 0).replace(/[^0-9]/g, '')));
+  
+  const allPoints = [...buyPoints, ...sellPoints];
+  const min = Math.min(...allPoints) * 0.999;
+  const max = Math.max(...allPoints) * 1.001;
+  const range = max - min;
+
+  const width = 1000;
+  const height = 300; // Tăng thêm chiều cao cho thoáng
+  const margin = { top: 40, right: 90, bottom: 40, left: 20 };
+  const chartWidth = width - margin.right;
+  const chartHeight = height - margin.bottom - margin.top;
+
+  const getX = (i) => (i / (data.length - 1)) * chartWidth;
+  const getY = (p) => margin.top + chartHeight - ((p - min) / range) * chartHeight;
+
+  // Tạo đường kẻ Path
+  const buyPath = data.map((_, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(buyPoints[i])}`).join(' ');
+  const sellPath = data.map((_, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(sellPoints[i])}`).join(' ');
+
+  // Xử lý khi rà chuột
+  const handleMouseMove = (e) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const ratio = x / rect.width;
+    const index = Math.round(ratio * (data.length - 1));
+    setHoverIndex(Math.max(0, Math.min(data.length - 1, index)));
+  };
 
   return (
-    <svg width="100%" height="40" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-      <path d={pathData} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div style={{ background: '#131722', position: 'relative', cursor: 'crosshair', userSelect: 'none' }} 
+         onMouseMove={handleMouseMove} 
+         onMouseLeave={() => setHoverIndex(null)}>
+      
+      <svg ref={svgRef} width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        {/* Lưới ngang (Grid) */}
+        {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+          <g key={i}>
+            <line x1="0" y1={getY(min + pct * range)} x2={chartWidth} y2={getY(min + pct * range)} stroke="#2a2e39" strokeWidth="1" strokeDasharray="4" />
+            <text x={chartWidth + 10} y={getY(min + pct * range) + 4} fill="#868993" fontSize="12">{(min + pct * range).toLocaleString('vi-VN')}</text>
+          </g>
+        ))}
+
+        {/* Đổ bóng vùng giá */}
+        <path d={`${sellPath} L ${chartWidth} ${height - margin.bottom} L 0 ${height - margin.bottom} Z`} fill="url(#gradRed)" />
+        <defs>
+          <linearGradient id="gradRed" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f23645" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#f23645" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Đường vẽ chính */}
+        <path d={buyPath} fill="none" stroke="#22ab94" strokeWidth="3" strokeLinejoin="round" />
+        <path d={sellPath} fill="none" stroke="#f23645" strokeWidth="3" strokeLinejoin="round" />
+
+        {/* Trục thời gian */}
+        {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+          const idx = Math.floor(pct * (data.length - 1));
+          return (
+            <text key={i} x={getX(idx)} y={height - 10} fill="#868993" fontSize="11" textAnchor="middle">
+              {new Date(data[idx].timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+            </text>
+          );
+        })}
+
+        {/* --- ĐIỂM TƯƠNG TÁC (CROSSHAIR) --- */}
+        {hoverIndex !== null && (
+          <g>
+            <line x1={getX(hoverIndex)} y1={margin.top} x2={getX(hoverIndex)} y2={height - margin.bottom} stroke="#ffffff" strokeWidth="1" strokeDasharray="4" />
+            <circle cx={getX(hoverIndex)} cy={getY(buyPoints[hoverIndex])} r="6" fill="#22ab94" stroke="#fff" strokeWidth="2" />
+            <circle cx={getX(hoverIndex)} cy={getY(sellPoints[hoverIndex])} r="6" fill="#f23645" stroke="#fff" strokeWidth="2" />
+          </g>
+        )}
+      </svg>
+
+      {/* --- TOOLTIP (HỘP THÔNG TIN) --- */}
+      {hoverIndex !== null && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: getX(hoverIndex) > width / 2 ? (getX(hoverIndex) / 10 * 8) : (getX(hoverIndex) / 10 * 12),
+          transform: 'translateX(-50%)',
+          background: 'rgba(30, 34, 45, 0.95)',
+          border: '1px solid #363a45',
+          borderRadius: '4px',
+          padding: '10px',
+          color: '#fff',
+          fontSize: '12px',
+          pointerEvents: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+          zIndex: 10
+        }}>
+          <div style={{ color: '#868993', marginBottom: '5px', borderBottom: '1px solid #363a45', pb: '5px' }}>
+             🕒 {new Date(data[hoverIndex].timestamp).toLocaleString('vi-VN')}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
+            <span style={{ color: '#22ab94' }}>MUA: <b>{data[hoverIndex].buy}</b></span>
+            <span style={{ color: '#f23645' }}>BÁN: <b>{data[hoverIndex].sell}</b></span>
+          </div>
+        </div>
+      )}
+
+      {/* Chú thích cố định */}
+      <div style={{ position: 'absolute', top: 10, left: 20, display: 'flex', gap: '15px', fontSize: '11px' }}>
+         <b style={{ color: '#22ab94' }}>● GIÁ MUA</b>
+         <b style={{ color: '#f23645' }}>● GIÁ BÁN</b>
+      </div>
+    </div>
   );
 };
+
+
 // Component bọc các tính năng trả phí
 const PremiumGate = ({ isPro, children, message = "Nâng cấp Premium" }) => {
   if (isPro) return children; // Nếu là Pro, cho xem nội dung gốc bình thường
@@ -91,6 +189,51 @@ const ruleInputStyle = {
   outline: 'none'
 };
 
+const SAMPLE_DATA = {
+  shop_name: "TIỆM VÀNG DEMO",
+  shop_address: "123 Đường ABC, Quận 1",
+  shop_phone: "0909 123 456",
+  marquee_text: "Chào mừng quý khách! Chúc quý khách vạn sự như ý!",
+  prices: [
+    { name: "VÀNG SJC", mua: "82000000", ban: "84500000" },
+    { name: "VÀNG 9999", mua: "78000000", ban: "79500000" },
+    { name: "VÀNG 24K", mua: "76000000", ban: "77500000" },
+    { name: "VÀNG 18K", mua: "55000000", ban: "57000000" }
+  ]
+};
+
+// Hàm tạo HTML để nhét vào iframe (Giống hệt trang AdminTemplate của bạn)
+const getPreviewHtml = (template, formatVND) => {
+  if (!template) return "";
+  let rowsHtml = "";
+  SAMPLE_DATA.prices.forEach(p => {
+    rowsHtml += (template.row_template || "")
+      .replace(/{{LOAI_VANG}}/g, p.name)
+      .replace(/{{GIA_MUA}}/g, formatVND(p.mua))
+      .replace(/{{GIA_BAN}}/g, formatVND(p.ban));
+  });
+
+  const fullHTML = (template.html_template || "")
+    .replace(/{{SHOP_NAME}}/g, SAMPLE_DATA.shop_name)
+    .replace(/{{SHOP_ADDRESS}}/g, SAMPLE_DATA.shop_address)
+    .replace(/{{SHOP_PHONE}}/g, SAMPLE_DATA.shop_phone)
+    .replace(/{{MARQUEE_TEXT}}/g, SAMPLE_DATA.marquee_text)
+    .replace(/{{PRICE_LIST}}/g, rowsHtml)
+    .replace(/{{CURRENT_DATE}}/g, "23/03/2026");
+
+  return `
+    <html>
+      <head>
+        <style>
+          body { margin: 0; padding: 0; overflow: hidden; width: 1920px; height: 1080px; background: #000; }
+          ${template.css_template}
+        </style>
+      </head>
+      <body>${fullHTML}</body>
+    </html>
+  `;
+};
+
 export default function HomeAdmin() {
   const [user, setUser] = useState(null);
   const [boardData, setBoardData] = useState(null);
@@ -99,12 +242,26 @@ export default function HomeAdmin() {
   const [externalPrices, setExternalPrices] = useState({});
   const [isArchiving, setIsArchiving] = useState(false);
   const isPro = boardData?.plan === 'premium';
+  const [previewingTemplate, setPreviewingTemplate] = useState(null);
   // Fingerprint để so sánh giá cũ/mới (Chống dư thừa dữ liệu)
   const lastSavedPricesRef = useRef("");
   const [externalHistory, setExternalHistory] = useState({});
   // State cho Đăng nhập
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const getHistoryForChart = (sourceId, itemSlug) => {
+    const historyObj = externalHistory[sourceId]?.[itemSlug];
+    if (!historyObj) return [];
+
+    return Object.keys(historyObj)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .map(time => ({
+        sell: historyObj[time].sell,
+        buy: historyObj[time].buy,
+        timestamp: parseInt(time)
+      }))
+      .slice(-90); // Lấy 90 điểm để có sóng dài
+  };
 
   //1. redirect tv link
   const [pairCode, setPairCode] = useState('');
@@ -462,83 +619,93 @@ export default function HomeAdmin() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
           {Object.entries(externalPrices).map(([sourceId, source]) => {
             const isExpanded = expandedSources[sourceId];
             const sortedItems = Object.values(source.items || {}).sort((a, b) => (a.order || 0) - (b.order || 0));
 
+            // Lấy dữ liệu của loại vàng đầu tiên để vẽ biểu đồ đại diện cho tiệm
+            const firstItemSlug = sortedItems[0]?.label.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const historyData = getHistoryForChart(sourceId, firstItemSlug);
+
             return (
               <div key={sourceId} style={{
-                background: '#fff', borderRadius: '16px', border: '3px solid #222', // Viền cực đậm
-                boxShadow: '0 10px 20px rgba(0,0,0,0.1)', overflow: 'hidden'
+                background: '#fff', borderRadius: '16px', border: '3px solid #222',
+                boxShadow: '0 12px 24px rgba(0,0,0,0.15)', overflow: 'hidden'
               }}>
-                {/* HEADER LIVE: Đèn xanh nhấp nháy */}
+                {/* --- PHẦN 1: HEADER TIỆM --- */}
                 <div onClick={() => toggleExpand(sourceId)} style={{
-                  padding: '20px 25px', background: isExpanded ? '#000' : '#f8f9fa',
+                  padding: '20px 25px', background: isExpanded ? '#131722' : '#f8f9fa',
                   color: isExpanded ? '#fff' : '#000', cursor: 'pointer',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  transition: 'all 0.3s'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{
-                      width: '15px', height: '15px', background: '#28a745', borderRadius: '50%',
-                      boxShadow: '0 0 12px #28a745', animation: 'pulse 1.5s infinite'
+                      width: '12px', height: '12px', background: '#22ab94', borderRadius: '50%',
+                      boxShadow: '0 0 10px #22ab94', animation: 'pulse 1.5s infinite'
                     }}></div>
-                    <strong style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>{source.name}</strong>
+                    <strong style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>{source.name}</strong>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '12px', opacity: 0.7, fontWeight: 'bold' }}>CẬP NHẬT LẦN CUỐI</div>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                        {sortedItems[0] ? new Date(sortedItems[0].updatedAt).toLocaleString('vi-VN') : '--:--'}
+                      <div style={{ fontSize: '10px', opacity: 0.6, fontWeight: 'bold' }}>CẬP NHẬT</div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                        {sortedItems[0]?.updatedAt ? new Date(sortedItems[0].updatedAt).toLocaleTimeString('vi-VN') : '--:--'}
                       </div>
                     </div>
                     <span style={{ fontSize: '28px' }}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
                 </div>
 
-                {/* BẢNG GIÁ CHI TIẾT */}
+                {/* --- PHẦN 2: BIỂU ĐỒ TRADINGVIEW (CHỈ HIỆN KHI MỞ RỘNG) --- */}
+                {isExpanded && historyData.length >= 2 && (
+                  <div style={{ borderBottom: '2px solid #222' }}>
+                    <TradingViewChart data={historyData} />
+                  </div>
+                )}
+
+                {/* --- PHẦN 3: BẢNG GIÁ CHI TIẾT --- */}
                 {isExpanded && (
-                  <div style={{ borderTop: '3px solid #222' }}>
+                  <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                      <thead style={{ background: '#333', color: '#fff' }}>
+                      <thead style={{ background: '#1e222d', color: '#afb1b6' }}>
                         <tr>
-                          <th style={{ padding: '15px', textAlign: 'left', width: '40%', fontSize: '16px' }}>LOẠI VÀNG</th>
-                          <th style={{ padding: '15px', textAlign: 'center', fontSize: '16px' }}>MUA VÀO</th>
-                          <th style={{ padding: '15px', textAlign: 'center', fontSize: '16px' }}>BÁN RA</th>
+                          <th style={{ padding: '15px', textAlign: 'left', paddingLeft: '25px', width: '40%' }}>LOẠI VÀNG</th>
+                          <th style={{ padding: '15px', textAlign: 'center' }}>MUA VÀO</th>
+                          <th style={{ padding: '15px', textAlign: 'center' }}>BÁN RA</th>
                         </tr>
                       </thead>
                       <tbody style={{ filter: isPro ? 'none' : 'blur(8px)' }}>
                         {sortedItems.map((item, idx) => {
-                          const buyChange = getPriceDiff(sourceId, item.label.toLowerCase().replace(/[^a-z0-9]/g, '_'), item.buy);
-                          const sellChange = getPriceDiff(sourceId, item.label.toLowerCase().replace(/[^a-z0-9]/g, '_'), item.sell);
+                          const itemSlug = item.label.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                          const buyChange = getPriceDiff(sourceId, itemSlug, item.buy);
+                          const sellChange = getPriceDiff(sourceId, itemSlug, item.sell);
                           const isJustUpdated = (Date.now() - item.updatedAt) < 60000;
 
                           return (
                             <tr key={idx} className={isJustUpdated ? 'flash-live' : ''} style={{
-                              borderBottom: '2px solid #eee',
+                              borderBottom: '1px solid #eee',
                               background: idx % 2 === 0 ? '#fff' : '#fcfcfc'
                             }}>
-                              {/* TÊN VÀNG */}
-                              <td style={{
-                                padding: '25px 20px', fontSize: '20px', fontWeight: '900', color: '#000',
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                              }}>
+                              {/* TÊN LOẠI VÀNG */}
+                              <td style={{ padding: '20px 25px', fontSize: '18px', fontWeight: 'bold', color: '#000' }}>
                                 {item.label}
                               </td>
 
                               {/* GIÁ MUA */}
-                              <td style={{ padding: '20px', textAlign: 'center' }}>
-                                <div style={{ fontSize: '26px', fontWeight: '900', color: '#000' }}>{item.buy}</div>
-                                <div style={{ fontSize: '14px', color: buyChange.color, fontWeight: 'bold', marginTop: '4px' }}>
+                              <td style={{ padding: '15px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '24px', fontWeight: '900', color: '#22ab94' }}>{item.buy}</div>
+                                <div style={{ fontSize: '13px', color: buyChange.color, fontWeight: 'bold' }}>
                                   {buyChange.symbol} {buyChange.diff !== '0' ? buyChange.diff : ''}
                                 </div>
                               </td>
 
                               {/* GIÁ BÁN */}
-                              <td style={{ padding: '20px', textAlign: 'center' }}>
-                                <div style={{ fontSize: '26px', fontWeight: '900', color: '#d00' }}>{item.sell}</div>
-                                <div style={{ fontSize: '14px', color: sellChange.color, fontWeight: 'bold', marginTop: '4px' }}>
+                              <td style={{ padding: '15px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '24px', fontWeight: '900', color: '#f23645' }}>{item.sell}</div>
+                                <div style={{ fontSize: '13px', color: sellChange.color, fontWeight: 'bold' }}>
                                   {sellChange.symbol} {sellChange.diff !== '0' ? sellChange.diff : ''}
                                 </div>
                               </td>
@@ -630,29 +797,117 @@ export default function HomeAdmin() {
         </div>
 
         {/* KHỐI 3: GIAO DIỆN (Khóa template trừ bản mặc định cho Free) */}
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-          <h3 style={{ marginTop: 0, fontSize: '16px' }}>🎨 Chọn giao diện Tivi</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+        {/* KHỐI 3: CHỌN GIAO DIỆN CÓ LIVE PREVIEW */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #dee2e6' }}>
+          <h3 style={{ marginTop: 0, fontSize: '18px', marginBottom: '15px' }}>🎨 Chọn giao diện Tivi</h3>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
             {Object.keys(globalTemplates).map((key) => {
-              const isLocked = !isPro && key !== 'mau_do_truyen_thong'; // 'mau_do_mac_dinh' là ID template free
+              const template = globalTemplates[key];
+              const isLocked = !isPro && key !== 'mau_do_truyen_thong';
+              const isActive = boardData?.template_id === key;
+
               return (
-                <button
-                  key={key}
-                  disabled={isLocked}
-                  onClick={() => applyTheme(key)}
-                  style={{
-                    padding: '10px 15px',
-                    cursor: isLocked ? 'not-allowed' : 'pointer',
-                    background: isLocked ? '#eee' : (boardData?.template_id === key ? '#007acc' : '#f8f9fa'),
-                    color: isLocked ? '#999' : (boardData?.template_id === key ? '#fff' : '#333'),
-                    border: '1px solid #ddd', borderRadius: '6px'
-                  }}
-                >
-                  {isLocked ? `🔒 ${globalTemplates[key].name}` : globalTemplates[key].name}
-                </button>
+                <div key={key} style={{ position: 'relative', borderRadius: '8px', border: isActive ? '3px solid #007acc' : '1px solid #ddd', overflow: 'hidden' }}>
+                  {/* Vùng xem trước nhỏ */}
+                  <div style={{ height: '80px', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                    onClick={() => setPreviewingTemplate(template)}>
+                    <small style={{ color: '#fff', fontSize: '10px' }}>👁️ Bấm để Xem thử</small>
+                    {isLocked && <div style={{ position: 'absolute', top: 5, right: 5 }}>🔒</div>}
+                  </div>
+
+                  {/* Nút chọn */}
+                  <button
+                    disabled={isLocked}
+                    onClick={() => applyTheme(key)}
+                    style={{
+                      width: '100%', padding: '8px', border: 'none', cursor: isLocked ? 'not-allowed' : 'pointer',
+                      background: isLocked ? '#eee' : (isActive ? '#007acc' : '#f8f9fa'),
+                      color: isActive ? '#fff' : '#333', fontSize: '12px', fontWeight: 'bold'
+                    }}
+                  >
+                    {isActive ? 'ĐANG DÙNG' : template.name}
+                  </button>
+                </div>
               );
             })}
           </div>
+
+          {/* --- MODAL HIỂN THỊ LIVE PREVIEW (Giống hệt TV thật) --- */}
+          {previewingTemplate && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 10000,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', padding: '20px'
+            }} onClick={() => setPreviewingTemplate(null)}>
+
+              <div style={{
+                width: '90%', maxWidth: '1000px', // Khung Popup
+                background: '#fff', borderRadius: '15px',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+                overflow: 'hidden'
+              }} onClick={e => e.stopPropagation()}>
+
+                {/* Tiêu đề */}
+                <div style={{ padding: '15px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee' }}>
+                  <h4 style={{ margin: 0 }}>📺 Xem thử: {previewingTemplate.name}</h4>
+                  <button onClick={() => setPreviewingTemplate(null)} style={{ cursor: 'pointer', border: 'none', background: 'none', fontSize: '20px' }}>✕</button>
+                </div>
+
+                {/* VÙNG HIỂN THỊ TV - QUAN TRỌNG NHẤT */}
+                <div style={{ background: '#1a1a1a', padding: '20px', display: 'flex', justifyContent: 'center' }}>
+                  <div style={{
+                    width: '100%',
+                    aspectRatio: '16 / 9', // Giữ đúng tỉ lệ Tivi
+                    background: '#000',
+                    position: 'relative',
+                    overflow: 'hidden', // Cắt bỏ phần thừa khi scale
+                    boxShadow: '0 0 30px rgba(0,0,0,0.5)',
+                    border: '4px solid #333', // Viền Tivi
+                    borderRadius: '4px'
+                  }}>
+                    {/* Iframe khổ lớn 1920px được thu nhỏ lại bằng scale */}
+                    <iframe
+                      srcDoc={getPreviewHtml(previewingTemplate, formatVND)}
+                      style={{
+                        width: '1920px',
+                        height: '1080px',
+                        border: 'none',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        transformOrigin: 'top left',
+                        // Tự động tính toán tỷ lệ thu nhỏ dựa trên chiều rộng thực tế của container
+                        transform: `scale(${(1000 * 0.9 - 48) / 1920})`, // 48 là phần padding/border trừ ra
+                        pointerEvents: 'none'
+                      }}
+                      className="preview-iframe"
+                    />
+                  </div>
+                </div>
+
+                {/* Nút bấm */}
+                <div style={{ padding: '15px 25px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button onClick={() => setPreviewingTemplate(null)} style={{ padding: '8px 20px', borderRadius: '5px', border: '1px solid #ccc', cursor: 'pointer' }}>Đóng</button>
+                  <button
+                    onClick={() => { applyTheme(previewingTemplate.id); setPreviewingTemplate(null); }}
+                    style={{ padding: '8px 20px', borderRadius: '5px', border: 'none', background: '#007acc', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    DÙNG GIAO DIỆN NÀY
+                  </button>
+                </div>
+              </div>
+
+              <style>{`
+      /* Script để iframe luôn vừa khít khi resize màn hình admin */
+      @media (max-width: 1000px) {
+        .preview-iframe {
+          transform: scale(calc((100vw * 0.9 - 80) / 1920)) !important;
+        }
+      }
+    `}</style>
+            </div>
+          )}
         </div>
 
 

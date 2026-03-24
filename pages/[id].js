@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 
-// 1. Cấu hình Firebase
+// 1. Cấu hình Firebase (Giữ nguyên của Quân)
 const firebaseConfig = {
     apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
     authDomain: "pricegold-4925d.firebaseapp.com",
@@ -20,46 +20,31 @@ const db = getDatabase(app);
 export default function TVDisplay() {
     const router = useRouter();
     const [data, setData] = useState(null);
-    const [time, setTime] = useState("");
-    
-    // --- LOGIC ZOOM & CACHE ---
     const [zoom, setZoom] = useState(1);
-
-    // Load zoom từ bộ nhớ khi vừa mở trang
-    useEffect(() => {
-        const savedZoom = localStorage.getItem('tv_zoom_level');
-        if (savedZoom) {
-            setZoom(parseFloat(savedZoom));
-        }
-    }, []);
-
-    // Lưu zoom vào bộ nhớ mỗi khi thay đổi
-    useEffect(() => {
-        localStorage.setItem('tv_zoom_level', zoom.toString());
-    }, [zoom]);
-
+    
     const isFirstRender = useRef(true);
-    const currentTemplateId = useRef("");
+    // Lưu trữ "dấu vân tay" của Template để biết khi nào cần thay áo mới (CSS/HTML)
+    const lastRenderHash = useRef("");
 
-    // Hàm định dạng số có dấu chấm
+    // --- LOGIC 1: ĐỊNH DẠNG SỐ ---
     const formatVND = (val) => {
         if (val === undefined || val === null || val === "") return "0";
         return val.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     };
 
-    // 1. Đồng hồ cập nhật mỗi giây
+    // --- LOGIC 2: ZOOM & CACHE (Ghi nhớ bộ nhớ Tivi) ---
     useEffect(() => {
-        const timer = setInterval(() => {
-            const now = new Date();
-            setTime(now.toLocaleTimeString('vi-VN'));
-        }, 1000);
-        return () => clearInterval(timer);
+        const savedZoom = localStorage.getItem('tv_zoom_level');
+        if (savedZoom) setZoom(parseFloat(savedZoom));
     }, []);
 
-    // 2. Lắng nghe dữ liệu Firebase Realtime
+    useEffect(() => {
+        localStorage.setItem('tv_zoom_level', zoom.toString());
+    }, [zoom]);
+
+    // --- LOGIC 3: LẮNG NGHE FIREBASE REALTIME ---
     useEffect(() => {
         if (!router.isReady) return;
-
         const { id } = router.query;
         if (!id) return;
 
@@ -69,36 +54,43 @@ export default function TVDisplay() {
                 const boardData = snapshot.val();
                 setData(boardData);
 
-                const { fullHTML, rowsHtml, marqueeText } = renderBoard(boardData);
+                const { fullHTML, rowsHtml } = renderBoard(boardData);
+                
+                // Tạo "vân tay" kết hợp giữa ID mẫu và nội dung CSS để nhận diện thay đổi style
+                const currentHash = `${boardData.template_id}_${(boardData.css_template || "").length}`;
 
-                // Nếu đổi Template hoặc lần đầu load: Thay toàn bộ HTML
-                if (isFirstRender.current || currentTemplateId.current !== boardData.template_id) {
+                if (isFirstRender.current || lastRenderHash.current !== currentHash) {
                     const container = document.getElementById('display-board');
-                    if (container) container.innerHTML = fullHTML;
+                    if (container) {
+                        // FIX: Chèn trực tiếp <style> vào trong innerHTML để ép Tivi load lại CSS
+                        container.innerHTML = `
+                            <style id="template-style">${boardData.css_template || ""}</style>
+                            <div class="template-content">${fullHTML}</div>
+                        `;
+                    }
                     isFirstRender.current = false;
-                    currentTemplateId.current = boardData.template_id;
+                    lastRenderHash.current = currentHash;
                 } else {
-                    // Nếu chỉ cập nhật giá: Chỉ thay phần tbody/rows để tránh lag
+                    // Nếu chỉ nhảy giá: Cập nhật từng phần để tránh lag/trắng màn hình
                     const target = document.querySelector('.price-table tbody') ||
-                        document.querySelector('.grid-container') ||
-                        document.querySelector('.price-table');
+                                   document.querySelector('.grid-container') ||
+                                   document.querySelector('.price-table');
 
                     if (target) target.innerHTML = rowsHtml;
 
                     const marqueeTag = document.querySelector('marquee');
-                    if (marqueeTag && marqueeTag.innerText !== marqueeText) {
-                        marqueeTag.innerText = marqueeText;
+                    if (marqueeTag && marqueeTag.innerText !== boardData.marquee_text) {
+                        marqueeTag.innerText = boardData.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
                     }
                 }
             }
         });
-
         return () => unsubscribe();
     }, [router.isReady, router.query]);
 
-    // 3. Logic Render Board (Giữ nguyên logic của bạn)
+    // --- LOGIC 4: RENDER TEMPLATE (Giữ nguyên logic của Quân) ---
     const renderBoard = (data) => {
-        if (!data) return { fullHTML: "", rowsHtml: "", marqueeText: "" };
+        if (!data) return { fullHTML: "", rowsHtml: "" };
 
         const isPro = data.plan === 'premium';
         let html = data.html_template || "";
@@ -106,6 +98,7 @@ export default function TVDisplay() {
         let rowsHtml = "";
 
         let mText = isPro ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!") : "Chúc Quý Khách Phát Tài Phát Lộc!";
+        // Free: Giới hạn 4 dòng
         const displayPrices = isPro ? (data.prices || []) : (data.prices || []).slice(0, 4);
 
         displayPrices.forEach(p => {
@@ -126,66 +119,47 @@ export default function TVDisplay() {
             .replace(/{{MARQUEE_TEXT}}/g, mText)
             .replace(/{{PRICE_LIST}}/g, rowsHtml);
 
-        return { fullHTML, rowsHtml, marqueeText: mText };
+        return { fullHTML, rowsHtml };
     };
 
-    // Style cho các nút điều khiển Zoom
+    // Style nút Zoom
     const controlBtnStyle = {
-        width: '45px',
-        height: '45px',
-        borderRadius: '50%',
-        border: '2px solid rgba(255,255,255,0.4)',
-        background: 'rgba(0,0,0,0.6)',
-        color: '#fff',
-        fontSize: '24px',
-        fontWeight: 'bold',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        outline: 'none',
-        transition: 'all 0.2s'
+        width: '45px', height: '45px', borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.4)', background: 'rgba(0,0,0,0.6)',
+        color: '#fff', fontSize: '24px', fontWeight: 'bold', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
     };
 
     return (
-        <div style={{  }}>
+        <div style={{ }}>
             
-            {/* --- BỘ ĐIỀU KHIỂN ZOOM (Ghi nhớ tự động) --- */}
+            {/* BỘ ĐIỀU KHIỂN ZOOM */}
             <div style={{ 
-                position: 'fixed', 
-                top: '25px', 
-                right: '25px', 
-                zIndex: 9999, 
-                display: 'flex', 
-                flexDirection: 'column',
-                gap: '12px',
-                opacity: 0.1, // Mặc định rất mờ để không làm phiền khách xem giá
-                transition: 'opacity 0.4s'
+                position: 'fixed', top: '25px', right: '25px', zIndex: 9999, 
+                display: 'flex', flexDirection: 'column', gap: '12px',
+                opacity: 0.1, transition: 'opacity 0.4s'
             }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1} 
                onMouseLeave={(e) => e.currentTarget.style.opacity = 0.1}>
                 
-                <button title="Phóng to" onClick={() => setZoom(z => Math.min(z + 0.05, 3))} style={controlBtnStyle}>+</button>
-                <button title="Thu nhỏ" onClick={() => setZoom(z => Math.max(z - 0.05, 0.3))} style={controlBtnStyle}>-</button>
-                <button title="Mặc định" onClick={() => { setZoom(1); localStorage.removeItem('tv_zoom_level'); }} 
-                        style={{...controlBtnStyle, fontSize: '11px'}}>100%</button>
+                <button onClick={() => setZoom(z => Math.min(z + 0.05, 3))} style={controlBtnStyle}>+</button>
+                <button onClick={() => setZoom(z => Math.max(z - 0.05, 0.3))} style={controlBtnStyle}>-</button>
+                <button onClick={() => { setZoom(1); localStorage.removeItem('tv_zoom_level'); }} 
+                        style={{...controlBtnStyle, fontSize: '10px'}}>100%</button>
             </div>
 
-            {/* CSS Template từ Database */}
-            <style dangerouslySetInnerHTML={{ __html: (data && data.css_template) ? data.css_template : "" }} />
-            
-            {/* --- VÙNG HIỂN THỊ CHÍNH (Áp dụng Zoom & Cache) --- */}
+            {/* VÙNG HIỂN THỊ CHÍNH (Áp dụng Zoom & Transform) */}
             <div id="display-board" style={{ 
                 zoom: zoom, 
-                WebkitZoom: zoom, // Hỗ trợ Smart TV đời cũ (Tizen, WebOS)
+                WebkitZoom: zoom,
                 transformOrigin: 'top center',
-                transition: 'zoom 0.15s ease-out'
+                transition: 'zoom 0.1s ease-out'
             }}>
                 <div style={{ textAlign: 'center', paddingTop: '20%', color: '#fff', fontFamily: 'sans-serif' }}>
                     Đang kết nối bảng giá...
                 </div>
             </div>
 
-            {/* Script hỗ trợ Clock cho các thẻ có id="clock" trong HTML Template */}
+            {/* Script hỗ trợ Clock Realtime */}
             <script dangerouslySetInnerHTML={{
                 __html: `
                     setInterval(() => {

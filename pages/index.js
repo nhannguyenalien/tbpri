@@ -29,7 +29,7 @@ const TradingViewChart = ({ data }) => {
 
   const buyPoints = data.map(d => parseFloat(String(d.buy || 0).replace(/[^0-9]/g, '')));
   const sellPoints = data.map(d => parseFloat(String(d.sell || 0).replace(/[^0-9]/g, '')));
-  
+
   const allPoints = [...buyPoints, ...sellPoints];
   const min = Math.min(...allPoints) * 0.999;
   const max = Math.max(...allPoints) * 1.001;
@@ -59,10 +59,10 @@ const TradingViewChart = ({ data }) => {
   };
 
   return (
-    <div style={{ background: '#131722', position: 'relative', cursor: 'crosshair', userSelect: 'none' }} 
-         onMouseMove={handleMouseMove} 
-         onMouseLeave={() => setHoverIndex(null)}>
-      
+    <div style={{ background: '#131722', position: 'relative', cursor: 'crosshair', userSelect: 'none' }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverIndex(null)}>
+
       <svg ref={svgRef} width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
         {/* Lưới ngang (Grid) */}
         {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
@@ -123,7 +123,7 @@ const TradingViewChart = ({ data }) => {
           zIndex: 10
         }}>
           <div style={{ color: '#868993', marginBottom: '5px', borderBottom: '1px solid #363a45', pb: '5px' }}>
-             🕒 {new Date(data[hoverIndex].timestamp).toLocaleString('vi-VN')}
+            🕒 {new Date(data[hoverIndex].timestamp).toLocaleString('vi-VN')}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px' }}>
             <span style={{ color: '#22ab94' }}>MUA: <b>{data[hoverIndex].buy}</b></span>
@@ -134,8 +134,8 @@ const TradingViewChart = ({ data }) => {
 
       {/* Chú thích cố định */}
       <div style={{ position: 'absolute', top: 10, left: 20, display: 'flex', gap: '15px', fontSize: '11px' }}>
-         <b style={{ color: '#22ab94' }}>● GIÁ MUA</b>
-         <b style={{ color: '#f23645' }}>● GIÁ BÁN</b>
+        <b style={{ color: '#22ab94' }}>● GIÁ MUA</b>
+        <b style={{ color: '#f23645' }}>● GIÁ BÁN</b>
       </div>
     </div>
   );
@@ -616,6 +616,110 @@ export default function HomeAdmin() {
               }}
               placeholder={isPro ? "Nhập nội dung thông báo..." : "Nâng cấp Premium để tùy chỉnh chữ chạy"}
             />
+          </div>
+        </div>
+
+        {/* --- 📊 KHỐI THỊ TRƯỜNG: HIỆN TITLE, LÀM MỜ NỘI DUNG NẾU KHÔNG PHẢI PRO --- */}
+        <div style={{ marginBottom: '30px' }}>
+          <h3 style={{
+            color: '#333',
+            borderLeft: '4px solid #007acc',
+            paddingLeft: '10px',
+            marginBottom: '15px',
+            fontSize: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <span>📈 THỊ TRƯỜNG QUỐC TẾ & TỶ GIÁ</span>
+            {!isPro && <span style={{ fontSize: '10px', background: '#ff9800', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>PREMIUM</span>}
+          </h3>
+
+          <div style={{
+            position: 'relative', // Quan trọng để làm lớp phủ
+            background: '#fff',
+            padding: '15px',
+            borderRadius: '12px',
+            border: '1px solid #dee2e6',
+            boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
+            overflow: 'hidden'
+          }}>
+
+            {/* NỘI DUNG BÊN TRONG: BỊ LÀM MỜ NẾU !ISPRO */}
+            <div style={{
+              filter: isPro ? 'none' : 'blur(8px)',
+              pointerEvents: isPro ? 'auto' : 'none', // Khóa click nếu không phải pro
+              transition: 'all 0.3s ease'
+            }}>
+              {/* 1. Biểu đồ Vàng (TradingView & Kitco) */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
+                <div style={{ flex: '1', minWidth: '320px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#007acc', marginBottom: '5px', textAlign: 'center' }}>TRADINGVIEW XAU/USD</div>
+                  <iframe
+                    style={{ width: '100%', height: '360px', border: '1px solid #eee', borderRadius: '8px' }}
+                    src="https://s.tradingview.com/widgetembed/?symbol=XAUUSD&interval=1&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&theme=light&style=1&timezone=Etc%2FUTC&studies_overrides={}&overrides={}&enabled_features=[]&disabled_features=[]&locale=vi"
+                  ></iframe>
+                </div>
+
+                <div style={{ flex: '1', minWidth: '320px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#d00', marginBottom: '5px', textAlign: 'center' }}>KITCO LIVE CHART</div>
+                  <div style={{ border: '1px solid #eee', borderRadius: '8px', overflow: 'hidden', height: '360px', display: 'flex', alignItems: 'center', background: '#fff' }}>
+                    <img id="kitcoLiveGold" src="https://m.taiem.com.vn/images/kitcoChart.png" style={{ width: '100%', height: 'auto' }} alt="Kitco" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Tỷ giá Ngoại tệ */}
+              <div style={{ borderTop: '2px solid #f8f9fa', paddingTop: '15px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#28a745', marginBottom: '10px', textAlign: 'center' }}>💱 TỶ GIÁ NGOẠI TỆ HÔM NAY</div>
+                <iframe style={{ border: 'none', width: '100%', height: '500px', borderRadius: '8px' }} src="https://chogia.vn/ma-nhung-cho-iframe?ma=ofr"></iframe>
+              </div>
+            </div>
+
+            {/* LỚP PHỦ NÂNG CẤP (CHỈ HIỆN KHI !ISPRO) */}
+            {!isPro && (
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(255, 255, 255, 0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10,
+                textAlign: 'center',
+                padding: '20px'
+              }}>
+                <div style={{
+                  background: '#fff',
+                  padding: '25px',
+                  borderRadius: '15px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                  border: '1px solid #eee'
+                }}>
+                  <div style={{ fontSize: '40px', marginBottom: '10px' }}>🔒</div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>Tính năng Premium</h4>
+                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px', maxWidth: '250px' }}>
+                    Xem biểu đồ vàng thế giới và tỷ giá ngoại tệ trực tuyến để bám sát thị trường.
+                  </p>
+                  <button
+                    onClick={() => window.location.href = '/premium'}
+                    style={{
+                      padding: '12px 25px',
+                      background: '#007acc',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(0,122,204,0.3)'
+                    }}
+                  >
+                    🚀 NÂNG CẤP PREMIUM NGAY
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

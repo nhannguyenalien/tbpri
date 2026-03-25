@@ -241,7 +241,12 @@ export default function HomeAdmin() {
   const [history, setHistory] = useState([]);
   const [externalPrices, setExternalPrices] = useState({});
   const [isArchiving, setIsArchiving] = useState(false);
-  const isPro = boardData?.plan === 'premium';
+  const isPro = boardData?.plan === 'premium' || (boardData?.trial_ends && Date.now() < boardData.trial_ends);
+
+  // Tính số ngày dùng thử còn lại (để hiển thị UI)
+  const trialDaysLeft = boardData?.trial_ends
+    ? Math.max(0, Math.ceil((boardData.trial_ends - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
   const [previewingTemplate, setPreviewingTemplate] = useState(null);
   // Fingerprint để so sánh giá cũ/mới (Chống dư thừa dữ liệu)
   const lastSavedPricesRef = useRef("");
@@ -262,6 +267,41 @@ export default function HomeAdmin() {
       }))
       .slice(-90); // Lấy 90 điểm để có sóng dài
   };
+
+  // --- LOGIC ĐẾM NGƯỢC CHUẨN (LUÔN ĐỌC TỪ DB) ---
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    // Lấy mốc thời gian hết hạn thực tế từ DB (Ưu tiên Premium, sau đó là Trial)
+    const expireDate = boardData?.premium_ends || boardData?.trial_ends;
+
+    if (!expireDate) {
+      setTimeLeft("---");
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const diff = expireDate - now;
+
+      if (diff <= 0) {
+        setTimeLeft("HẾT HẠN");
+        clearInterval(timer);
+      } else {
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        
+        // Hiển thị gọn: 250n 05:30:15 (n = ngày)
+        setTimeLeft(
+          `${days > 0 ? days + 'n ' : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+        );
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [boardData]);
 
   //1. redirect tv link
   const [pairCode, setPairCode] = useState('');
@@ -338,8 +378,24 @@ export default function HomeAdmin() {
       if (currentUser) {
         // Lấy giá hiện tại trên Tivi
         onValue(ref(db, `tv_sessions/${currentUser.uid}`), (s) => {
-          if (s.exists()) setBoardData(s.val());
-          else set(ref(db, `tv_sessions/${currentUser.uid}`), { shop_name: "Tiệm Vàng Mới", prices: [] });
+          if (s.exists()) {
+            setBoardData(s.val());
+          } else {
+            // NGƯỜI DÙNG MỚI: Tặng 3 ngày Pro
+            const trialDays = 3;
+            const trialEnds = Date.now() + (trialDays * 24 * 60 * 60 * 1000); // Hiện tại + 3 ngày (ms)
+
+            const initialData = {
+              shop_name: "Tiệm Vàng Mới",
+              prices: [],
+              plan: 'trial', // Đánh dấu là đang dùng thử
+              trial_ends: trialEnds,
+              created_at: serverTimestamp()
+            };
+
+            set(ref(db, `tv_sessions/${currentUser.uid}`), initialData);
+            setBoardData(initialData);
+          }
         });
         // Lấy kho Template
         onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val()));
@@ -509,6 +565,74 @@ export default function HomeAdmin() {
         <PremiumGate isPro={isPro} message="NÂNG CẤP NGAY" />
         <button onClick={() => signOut(auth)} style={{ padding: '5px 15px', background: '#f44336', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Đăng xuất</button>
       </header>
+      {/* BANNER THÔNG TIN PRO/PREMIUM TỔNG HỢP */}
+      {(boardData?.trial_ends || boardData?.premium_ends) && (
+        <div style={{
+          background: boardData?.plan === 'premium' 
+            ? 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%)' // Xanh lá Premium
+            : 'linear-gradient(135deg, #e65100 0%, #ef6c00 100%)', // Màu cam Trial
+          color: '#fff', padding: '12px 20px', borderRadius: '12px', marginBottom: '20px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ fontSize: '28px' }}>{boardData?.plan === 'premium' ? '💎' : '🎁'}</div>
+            <div>
+              <div style={{ fontSize: '10px', opacity: 0.8, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                GÓI ĐANG DÙNG: {boardData?.plan === 'premium' ? 'BẢN QUYỀN PREMIUM' : 'DÙNG THỬ PRO'}
+              </div>
+              <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                Hạn đến: <span style={{ color: '#ffeb3b' }}>
+                  {/* Hiển thị chính xác ngày từ DB */}
+                  {new Date(boardData?.premium_ends || boardData?.trial_ends).toLocaleDateString('vi-VN')}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center', flex: 1 }}>
+            <div style={{ fontSize: '10px', opacity: 0.7 }}>THỜI GIAN CÒN LẠI</div>
+            <div style={{ 
+              fontSize: '24px', 
+              fontWeight: '900', 
+              fontFamily: 'monospace',
+              letterSpacing: '1px'
+            }}>
+              {timeLeft}
+            </div>
+          </div>
+
+          <button 
+            onClick={() => window.location.href = '/premium'}
+            style={{
+              background: '#fff',
+              color: boardData?.plan === 'premium' ? '#1b5e20' : '#e65100',
+              border: 'none', padding: '8px 15px', borderRadius: '6px',
+              fontWeight: 'bold', cursor: 'pointer', fontSize: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}
+          >
+            {boardData?.plan === 'premium' ? 'GIA HẠN' : 'NÂNG CẤP'}
+          </button>
+        </div>
+      )}
+
+      {/* Banner thông báo dùng thử */}
+      {boardData?.plan !== 'premium' && isPro && (
+        <div style={{
+          background: 'linear-gradient(90deg, #FF9800, #F44336)',
+          color: '#fff',
+          padding: '10px',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          textAlign: 'center',
+          fontWeight: 'bold',
+          fontSize: '14px',
+          boxShadow: '0 4px 10px rgba(244, 67, 54, 0.3)'
+        }}>
+          🎁 Chào mừng bạn! Bạn đang được tặng {trialDaysLeft} ngày trải nghiệm đầy đủ tính năng Premium.
+        </div>
+      )}
 
       {isArchiving && <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', background: '#333', color: '#fff', padding: '8px 20px', borderRadius: '20px', fontSize: '12px', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>🔄 Đang tự động lưu lịch sử giá...</div>}
 

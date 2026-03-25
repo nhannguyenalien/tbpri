@@ -21,10 +21,33 @@ export default function TVDisplay() {
     const router = useRouter();
     const [data, setData] = useState(null);
     const [zoom, setZoom] = useState(1);
-    
+
     const isFirstRender = useRef(true);
     // Lưu trữ "dấu vân tay" của Template để biết khi nào cần thay áo mới (CSS/HTML)
     const lastRenderHash = useRef("");
+
+    useEffect(() => {
+        // 1. Tự động F5 toàn bộ trang sau mỗi 2 tiếng
+        // Đây là cách "vàng" để Tivi không bao giờ bị treo mặt buồn
+        const autoRefresh = setInterval(() => {
+            console.log("🚀 Đang làm mới hệ thống để giải phóng RAM...");
+            window.location.reload();
+        }, 2 * 60 * 60 * 1000); // 2 tiếng (7.200.000 ms)
+
+        // 2. Tự động làm mới Iframe mỗi 15 phút (Để giá Kitco/Tỷ giá luôn chạy)
+        const iframeRefresh = setInterval(() => {
+            const iframes = document.getElementsByTagName('iframe');
+            for (let i = 0; i < iframes.length; i++) {
+                const src = iframes[i].src;
+                iframes[i].src = src; // Nạp lại src để xóa cache iframe
+            }
+        }, 15 * 60 * 1000); // 15 phút
+
+        return () => {
+            clearInterval(autoRefresh);
+            clearInterval(iframeRefresh);
+        };
+    }, []);
 
     // --- LOGIC 1: ĐỊNH DẠNG SỐ ---
     const formatVND = (val) => {
@@ -55,7 +78,7 @@ export default function TVDisplay() {
                 setData(boardData);
 
                 const { fullHTML, rowsHtml } = renderBoard(boardData);
-                
+
                 // Tạo "vân tay" kết hợp giữa ID mẫu và nội dung CSS để nhận diện thay đổi style
                 const currentHash = `${boardData.template_id}_${(boardData.css_template || "").length}`;
 
@@ -73,8 +96,8 @@ export default function TVDisplay() {
                 } else {
                     // Nếu chỉ nhảy giá: Cập nhật từng phần để tránh lag/trắng màn hình
                     const target = document.querySelector('.price-table tbody') ||
-                                   document.querySelector('.grid-container') ||
-                                   document.querySelector('.price-table');
+                        document.querySelector('.grid-container') ||
+                        document.querySelector('.price-table');
 
                     if (target) target.innerHTML = rowsHtml;
 
@@ -104,8 +127,8 @@ export default function TVDisplay() {
         displayPrices.forEach(p => {
             rowsHtml += rowT
                 .replace(/{{LOAI_VANG}}/g, p.name || "")
-                .replace(/{{GIA_MUA}}/g, formatVND(p.mua)) 
-                .replace(/{{GIA_BAN}}/g, formatVND(p.ban)); 
+                .replace(/{{GIA_MUA}}/g, formatVND(p.mua))
+                .replace(/{{GIA_BAN}}/g, formatVND(p.ban));
         });
 
         const now = new Date();
@@ -131,25 +154,25 @@ export default function TVDisplay() {
     };
 
     return (
-        <div style={{ }}>
-            
+        <div style={{}}>
+
             {/* BỘ ĐIỀU KHIỂN ZOOM */}
-            <div style={{ 
-                position: 'fixed', top: '25px', right: '25px', zIndex: 9999, 
+            <div style={{
+                position: 'fixed', top: '25px', right: '25px', zIndex: 9999,
                 display: 'flex', flexDirection: 'column', gap: '12px',
                 opacity: 0.1, transition: 'opacity 0.4s'
-            }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1} 
-               onMouseLeave={(e) => e.currentTarget.style.opacity = 0.1}>
-                
+            }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = 0.1}>
+
                 <button onClick={() => setZoom(z => Math.min(z + 0.05, 3))} style={controlBtnStyle}>+</button>
                 <button onClick={() => setZoom(z => Math.max(z - 0.05, 0.3))} style={controlBtnStyle}>-</button>
-                <button onClick={() => { setZoom(1); localStorage.removeItem('tv_zoom_level'); }} 
-                        style={{...controlBtnStyle, fontSize: '10px'}}>100%</button>
+                <button onClick={() => { setZoom(1); localStorage.removeItem('tv_zoom_level'); }}
+                    style={{ ...controlBtnStyle, fontSize: '10px' }}>100%</button>
             </div>
 
             {/* VÙNG HIỂN THỊ CHÍNH (Áp dụng Zoom & Transform) */}
-            <div id="display-board" style={{ 
-                zoom: zoom, 
+            <div id="display-board" style={{
+                zoom: zoom,
                 WebkitZoom: zoom,
                 transformOrigin: 'top center',
                 transition: 'zoom 0.1s ease-out'
@@ -166,7 +189,7 @@ export default function TVDisplay() {
                         const el = document.getElementById('clock');
                         if(el) el.innerText = new Date().toLocaleTimeString('vi-VN');
                     }, 1000);
-                `}} 
+                `}}
             />
         </div>
     );

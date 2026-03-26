@@ -1,9 +1,8 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 
-// 1. Cấu hình Firebase (Giữ nguyên của Quân)
 const firebaseConfig = {
     apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
     authDomain: "pricegold-4925d.firebaseapp.com",
@@ -19,35 +18,9 @@ const db = getDatabase(app);
 
 export default function TVDisplay() {
     const router = useRouter();
-    const [data, setData] = useState(null);
-    const [zoom, setZoom] = useState(1);
-
     const isFirstRender = useRef(true);
-    // Lưu trữ "dấu vân tay" của Template để biết khi nào cần thay áo mới (CSS/HTML)
     const lastRenderHash = useRef("");
-
-    useEffect(() => {
-        // 1. Tự động F5 toàn bộ trang sau mỗi 2 tiếng
-        // Đây là cách "vàng" để Tivi không bao giờ bị treo mặt buồn
-        const autoRefresh = setInterval(() => {
-            console.log("🚀 Đang làm mới hệ thống để giải phóng RAM...");
-            window.location.reload();
-        }, 2 * 60 * 60 * 1000); // 2 tiếng (7.200.000 ms)
-
-        // 2. Tự động làm mới Iframe mỗi 15 phút (Để giá Kitco/Tỷ giá luôn chạy)
-        const iframeRefresh = setInterval(() => {
-            const iframes = document.getElementsByTagName('iframe');
-            for (let i = 0; i < iframes.length; i++) {
-                const src = iframes[i].src;
-                iframes[i].src = src; // Nạp lại src để xóa cache iframe
-            }
-        }, 15 * 60 * 1000); // 15 phút
-
-        return () => {
-            clearInterval(autoRefresh);
-            clearInterval(iframeRefresh);
-        };
-    }, []);
+    const zoomRef = useRef(1);
 
     // --- LOGIC 1: ĐỊNH DẠNG SỐ ---
     const formatVND = (val) => {
@@ -55,63 +28,62 @@ export default function TVDisplay() {
         return val.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     };
 
-    // --- LOGIC 2: ZOOM & CACHE (Ghi nhớ bộ nhớ Tivi) ---
+    // --- LOGIC 2: ZOOM ---
     useEffect(() => {
-        const savedZoom = localStorage.getItem('tv_zoom_level');
-        if (savedZoom) setZoom(parseFloat(savedZoom));
+        const saved = localStorage.getItem('tv_zoom_level');
+        if (saved) {
+            zoomRef.current = parseFloat(saved);
+            const board = document.getElementById('display-board');
+            if (board) board.style.zoom = zoomRef.current;
+        }
     }, []);
 
+    const changeZoom = (delta) => {
+        const next = Math.min(Math.max(zoomRef.current + delta, 0.3), 3);
+        zoomRef.current = next;
+        localStorage.setItem('tv_zoom_level', next.toString());
+        const board = document.getElementById('display-board');
+        if (board) board.style.zoom = next;
+    };
+
+    // --- LOGIC 3: TIMER RELOAD ---
     useEffect(() => {
-        localStorage.setItem('tv_zoom_level', zoom.toString());
-    }, [zoom]);
+        // 1. Reload toàn trang mỗi 30 phút — giải phóng RAM TV
+        const pageReload = setTimeout(() => {
+            console.log("🔄 Reload trang sau 30 phút...");
+            window.location.reload();
+        }, 30 * 60 * 1000);
 
-    // --- LOGIC 3: LẮNG NGHE FIREBASE REALTIME ---
-    useEffect(() => {
-        if (!router.isReady) return;
-        const { id } = router.query;
-        if (!id) return;
-
-        const boardRef = ref(db, `tv_sessions/${id}`);
-        const unsubscribe = onValue(boardRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const boardData = snapshot.val();
-                setData(boardData);
-
-                const { fullHTML, rowsHtml } = renderBoard(boardData);
-
-                // Tạo "vân tay" kết hợp giữa ID mẫu và nội dung CSS để nhận diện thay đổi style
-                const currentHash = `${boardData.template_id}_${(boardData.css_template || "").length}`;
-
-                if (isFirstRender.current || lastRenderHash.current !== currentHash) {
-                    const container = document.getElementById('display-board');
-                    if (container) {
-                        // FIX: Chèn trực tiếp <style> vào trong innerHTML để ép Tivi load lại CSS
-                        container.innerHTML = `
-                            <style id="template-style">${boardData.css_template || ""}</style>
-                            <div class="template-content">${fullHTML}</div>
-                        `;
-                    }
-                    isFirstRender.current = false;
-                    lastRenderHash.current = currentHash;
-                } else {
-                    // Nếu chỉ nhảy giá: Cập nhật từng phần để tránh lag/trắng màn hình
-                    const target = document.querySelector('.price-table tbody') ||
-                        document.querySelector('.grid-container') ||
-                        document.querySelector('.price-table');
-
-                    if (target) target.innerHTML = rowsHtml;
-
-                    const marqueeTag = document.querySelector('marquee');
-                    if (marqueeTag && marqueeTag.innerText !== boardData.marquee_text) {
-                        marqueeTag.innerText = boardData.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
-                    }
+        // 2. Reload iframe TradingView mỗi 5 phút
+        //    - Dùng about:blank trước để TV browser BUỘC phải load mới
+        //    - Stagger 3s giữa các iframe để tránh spike RAM
+        const iframeReload = setInterval(() => {
+            const iframes = document.querySelectorAll('#display-board iframe');
+            console.log(`🖼️ Đang reload ${iframes.length} iframe...`);
+            iframes.forEach((iframe, index) => {
+                // Lưu src gốc 1 lần duy nhất (không bị mất sau các lần reload)
+                if (!iframe.getAttribute('data-src')) {
+                    iframe.setAttribute('data-src', iframe.src);
                 }
-            }
-        });
-        return () => unsubscribe();
-    }, [router.isReady, router.query]);
+                const originalSrc = iframe.getAttribute('data-src');
 
-    // --- LOGIC 4: RENDER TEMPLATE (Giữ nguyên logic của Quân) ---
+                // Stagger: iframe 0 reload ngay, iframe 1 reload sau 3s, v.v.
+                setTimeout(() => {
+                    iframe.src = 'about:blank';
+                    setTimeout(() => {
+                        iframe.src = originalSrc;
+                    }, 2000);
+                }, index * 3000);
+            });
+        }, 5 * 60 * 1000);
+
+        return () => {
+            clearTimeout(pageReload);
+            clearInterval(iframeReload);
+        };
+    }, []);
+
+    // --- LOGIC 4: RENDER BOARD ---
     const renderBoard = (data) => {
         if (!data) return { fullHTML: "", rowsHtml: "" };
 
@@ -120,9 +92,13 @@ export default function TVDisplay() {
         let rowT = data.row_template || "";
         let rowsHtml = "";
 
-        let mText = isPro ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!") : "Chúc Quý Khách Phát Tài Phát Lộc!";
-        // Free: Giới hạn 4 dòng
-        const displayPrices = isPro ? (data.prices || []) : (data.prices || []).slice(0, 4);
+        const mText = isPro
+            ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!")
+            : "Chúc Quý Khách Phát Tài Phát Lộc!";
+
+        const displayPrices = isPro
+            ? (data.prices || [])
+            : (data.prices || []).slice(0, 4);
 
         displayPrices.forEach(p => {
             rowsHtml += rowT
@@ -132,7 +108,7 @@ export default function TVDisplay() {
         });
 
         const now = new Date();
-        const dateStr = now.getDate() + "/" + (now.getMonth() + 1) + "/" + now.getFullYear();
+        const dateStr = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
         const fullHTML = html
             .replace(/{{SHOP_NAME}}/g, data.shop_name || "TIỆM VÀNG")
@@ -145,52 +121,133 @@ export default function TVDisplay() {
         return { fullHTML, rowsHtml };
     };
 
-    // Style nút Zoom
-    const controlBtnStyle = {
+    // --- LOGIC 5: FIREBASE REALTIME ---
+    useEffect(() => {
+        if (!router.isReady) return;
+        const { id } = router.query;
+        if (!id) return;
+
+        const boardRef = ref(db, `tv_sessions/${id}`);
+        const unsubscribe = onValue(boardRef, (snapshot) => {
+            if (!snapshot.exists()) return;
+            const boardData = snapshot.val();
+            const { fullHTML, rowsHtml } = renderBoard(boardData);
+            const currentHash = `${boardData.template_id}_${(boardData.css_template || "").length}`;
+
+            if (isFirstRender.current || lastRenderHash.current !== currentHash) {
+                // ====================================================
+                // LẦN ĐẦU hoặc ĐỔI TEMPLATE: Render full HTML
+                // ====================================================
+                const container = document.getElementById('display-board');
+                if (container) {
+                    container.innerHTML = `
+                        <style id="template-style">${boardData.css_template || ""}</style>
+                        <div class="template-content">${fullHTML}</div>
+                    `;
+
+                    // Lưu data-src cho tất cả iframe ngay sau khi render
+                    // để timer reload có src gốc mà dùng
+                    container.querySelectorAll('iframe').forEach(iframe => {
+                        if (!iframe.getAttribute('data-src')) {
+                            iframe.setAttribute('data-src', iframe.src);
+                        }
+                    });
+                }
+                isFirstRender.current = false;
+                lastRenderHash.current = currentHash;
+
+            } else {
+                // ====================================================
+                // CHỈ CẬP NHẬT GIÁ: KHÔNG overwrite container
+                // → Iframe TradingView sống sót, không bị kill
+                // ====================================================
+
+                // Thử tìm tbody trước (template dạng table)
+                const tbody = document.querySelector('.price-table tbody');
+                if (tbody) {
+                    tbody.innerHTML = rowsHtml;
+                } else {
+                    // Fallback: template dạng grid hoặc custom
+                    const grid = document.querySelector('.grid-container') ||
+                        document.querySelector('.price-table');
+                    if (grid) grid.innerHTML = rowsHtml;
+                }
+
+                // Cập nhật marquee nếu thay đổi
+                const marquee = document.querySelector('marquee');
+                if (marquee && marquee.innerText !== boardData.marquee_text) {
+                    marquee.innerText = boardData.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
+                }
+
+                // Cập nhật ngày
+                const dateEl = document.getElementById('current-date');
+                if (dateEl) {
+                    const now = new Date();
+                    dateEl.innerText = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+                }
+            }
+        });
+
+        return () => unsubscribe();
+    }, [router.isReady, router.query]);
+
+    // --- STYLE NÚT ZOOM ---
+    const btnStyle = {
         width: '45px', height: '45px', borderRadius: '50%',
-        border: '2px solid rgba(255,255,255,0.4)', background: 'rgba(0,0,0,0.6)',
-        color: '#fff', fontSize: '24px', fontWeight: 'bold', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
+        border: '2px solid rgba(255,255,255,0.4)',
+        background: 'rgba(0,0,0,0.6)',
+        color: '#fff', fontSize: '24px', fontWeight: 'bold',
+        cursor: 'pointer', display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+        transition: 'all 0.2s'
     };
 
     return (
-        <div style={{}}>
-
+        <div>
             {/* BỘ ĐIỀU KHIỂN ZOOM */}
             <div style={{
                 position: 'fixed', top: '25px', right: '25px', zIndex: 9999,
                 display: 'flex', flexDirection: 'column', gap: '12px',
                 opacity: 0.1, transition: 'opacity 0.4s'
-            }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-                onMouseLeave={(e) => e.currentTarget.style.opacity = 0.1}>
-
-                <button onClick={() => setZoom(z => Math.min(z + 0.05, 3))} style={controlBtnStyle}>+</button>
-                <button onClick={() => setZoom(z => Math.max(z - 0.05, 0.3))} style={controlBtnStyle}>-</button>
-                <button onClick={() => { setZoom(1); localStorage.removeItem('tv_zoom_level'); }}
-                    style={{ ...controlBtnStyle, fontSize: '10px' }}>100%</button>
+            }}
+                onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                onMouseLeave={e => e.currentTarget.style.opacity = 0.1}
+            >
+                <button onClick={() => changeZoom(0.05)} style={btnStyle}>+</button>
+                <button onClick={() => changeZoom(-0.05)} style={btnStyle}>-</button>
+                <button onClick={() => {
+                    zoomRef.current = 1;
+                    localStorage.removeItem('tv_zoom_level');
+                    const board = document.getElementById('display-board');
+                    if (board) board.style.zoom = 1;
+                }} style={{ ...btnStyle, fontSize: '10px' }}>100%</button>
             </div>
 
-            {/* VÙNG HIỂN THỊ CHÍNH (Áp dụng Zoom & Transform) */}
-            <div id="display-board" style={{
-                zoom: zoom,
-                WebkitZoom: zoom,
-                transformOrigin: 'top center',
-                transition: 'zoom 0.1s ease-out'
-            }}>
-                <div style={{ textAlign: 'center', paddingTop: '20%', color: '#fff', fontFamily: 'sans-serif' }}>
+            {/* VÙNG HIỂN THỊ CHÍNH */}
+            <div
+                id="display-board"
+                style={{
+                    transformOrigin: 'top center',
+                    transition: 'zoom 0.1s ease-out'
+                }}
+            >
+                <div style={{
+                    textAlign: 'center', paddingTop: '20%',
+                    color: '#fff', fontFamily: 'sans-serif'
+                }}>
                     Đang kết nối bảng giá...
                 </div>
             </div>
 
-            {/* Script hỗ trợ Clock Realtime */}
+            {/* Clock Realtime */}
             <script dangerouslySetInnerHTML={{
                 __html: `
                     setInterval(() => {
                         const el = document.getElementById('clock');
-                        if(el) el.innerText = new Date().toLocaleTimeString('vi-VN');
+                        if (el) el.innerText = new Date().toLocaleTimeString('vi-VN');
                     }, 1000);
-                `}}
-            />
+                `
+            }} />
         </div>
     );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, get, update, set, onValue, push, serverTimestamp } from 'firebase/database';
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { useRouter } from 'next/router';
 
 
 // 1. Cấu hình Firebase
@@ -235,6 +236,8 @@ const getPreviewHtml = (template, formatVND) => {
 };
 
 export default function HomeAdmin() {
+  const router = useRouter();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [user, setUser] = useState(null);
   const [boardData, setBoardData] = useState(null);
   const [globalTemplates, setGlobalTemplates] = useState({});
@@ -242,7 +245,7 @@ export default function HomeAdmin() {
   const [externalPrices, setExternalPrices] = useState({});
   const [isArchiving, setIsArchiving] = useState(false);
   const isPro = boardData?.plan === 'premium' || (boardData?.trial_ends && Date.now() < boardData.trial_ends);
-
+  const lastSavedFingerprint = useRef("");
   // Tính số ngày dùng thử còn lại (để hiển thị UI)
   const trialDaysLeft = boardData?.trial_ends
     ? Math.max(0, Math.ceil((boardData.trial_ends - Date.now()) / (24 * 60 * 60 * 1000)))
@@ -361,68 +364,7 @@ export default function HomeAdmin() {
     }
   };
 
-  useEffect(() => {
-    if (user && isPro) {
-      // Lắng nghe lịch sử giá (Lấy 20 bản ghi gần nhất của mỗi tiệm)
-      const historyRef = ref(db, 'external_history');
-      return onValue(historyRef, (snapshot) => {
-        if (snapshot.exists()) setExternalHistory(snapshot.val());
-      });
-    }
-  }, [user, isPro]);
-
-  // 2. Lắng nghe trạng thái User và Dữ liệu
-  useEffect(() => {
-    return onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Lấy giá hiện tại trên Tivi
-        onValue(ref(db, `tv_sessions/${currentUser.uid}`), (s) => {
-          if (s.exists()) {
-            setBoardData(s.val());
-          } else {
-            // NGƯỜI DÙNG MỚI: Tặng 3 ngày Pro
-            const trialDays = 3;
-            const trialEnds = Date.now() + (trialDays * 24 * 60 * 60 * 1000); // Hiện tại + 3 ngày (ms)
-
-            const initialData = {
-              shop_name: "Tiệm Vàng Mới",
-              prices: [],
-              plan: 'trial', // Đánh dấu là đang dùng thử
-              trial_ends: trialEnds,
-              created_at: serverTimestamp()
-            };
-
-            set(ref(db, `tv_sessions/${currentUser.uid}`), initialData);
-            setBoardData(initialData);
-          }
-        });
-        // Lấy kho Template
-        onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val()));
-        // Lấy 10 bản ghi lịch sử mới nhất
-        onValue(ref(db, `price_history/${currentUser.uid}`), (snapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            const sorted = Object.entries(data)
-              .map(([id, val]) => ({ id, ...val }))
-              .sort((a, b) => b.timestamp - a.timestamp);
-            setHistory(sorted.slice(0, 10));
-          }
-        });
-        onValue(ref(db, 'external_prices/sources'), (snapshot) => {
-          if (snapshot.exists()) {
-            setExternalPrices(snapshot.val());
-          }
-        });
-      }
-    });
-  }, []);
-
-  // 1. Khai báo Ref để ghi nhớ trạng thái (không gây render lại)
-  const lastSavedFingerprint = useRef("");
-  // 3. Logic Tự động Lưu Lịch sử (Thông minh & Tiết kiệm)
-  // 3. Logic Tự động Lưu Lịch sử (Chỉ lưu 1 bản ghi duy nhất mỗi ngày)
-  useEffect(() => {
+   useEffect(() => {
     // Chỉ chạy nếu là Pro và có dữ liệu giá
     if (!isPro || !boardData?.prices || boardData.prices.length === 0) return;
 
@@ -462,6 +404,90 @@ export default function HomeAdmin() {
     return () => clearTimeout(timer);
   }, [boardData?.prices, history, isPro]);
 
+
+  useEffect(() => {
+    if (user && isPro) {
+      // Lắng nghe lịch sử giá (Lấy 20 bản ghi gần nhất của mỗi tiệm)
+      const historyRef = ref(db, 'external_history');
+      return onValue(historyRef, (snapshot) => {
+        if (snapshot.exists()) setExternalHistory(snapshot.val());
+      });
+    }
+  }, [user, isPro]);
+
+  // 2. Lắng nghe trạng thái User và Dữ liệu
+  useEffect(() => {
+    return onAuthStateChanged(auth, (currentUser) => {
+      if (!currentUser) {
+        // --- NẾU CHƯA ĐĂNG NHẬP: Lập tức đá sang trang Landing ---
+        router.push('/landing');
+      } else {
+        // --- NẾU ĐÃ ĐĂNG NHẬP: Lưu user và tắt loading ---
+        setUser(currentUser);
+        setIsCheckingAuth(false); // Quan trọng: Báo cho app biết đã kiểm tra xong để tắt loading
+
+        // Lấy giá hiện tại trên Tivi
+        onValue(ref(db, `tv_sessions/${currentUser.uid}`), (s) => {
+          if (s.exists()) {
+            setBoardData(s.val());
+          } else {
+            // NGƯỜI DÙNG MỚI: Tặng 3 ngày Pro
+            const trialDays = 3;
+            const trialEnds = Date.now() + (trialDays * 24 * 60 * 60 * 1000); // Hiện tại + 3 ngày (ms)
+
+            const initialData = {
+              shop_name: "Tiệm Vàng Mới",
+              prices: [],
+              plan: 'trial', // Đánh dấu là đang dùng thử
+              trial_ends: trialEnds,
+              created_at: serverTimestamp()
+            };
+
+            set(ref(db, `tv_sessions/${currentUser.uid}`), initialData);
+            setBoardData(initialData);
+          }
+        });
+
+        // Lấy kho Template
+        onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val()));
+        
+        // Lấy 10 bản ghi lịch sử mới nhất
+        onValue(ref(db, `price_history/${currentUser.uid}`), (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            const sorted = Object.entries(data)
+              .map(([id, val]) => ({ id, ...val }))
+              .sort((a, b) => b.timestamp - a.timestamp);
+            setHistory(sorted.slice(0, 10));
+          }
+        });
+
+        // Lấy giá các nguồn ngoài
+        onValue(ref(db, 'external_prices/sources'), (snapshot) => {
+          if (snapshot.exists()) {
+            setExternalPrices(snapshot.val());
+          }
+        });
+
+      } // ---> ĐÂY LÀ DẤU NGOẶC ĐÓNG CỦA KHỐI ELSE BỊ THIẾU <---
+    });
+  }, [router]); // Thêm router vào đây để React không cảnh báo
+
+  if (isCheckingAuth) {
+    return (
+       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa' }}>
+         <div style={{ width: '40px', height: '40px', border: '4px solid #007acc', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+         <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+  // 1. Khai báo Ref để ghi nhớ trạng thái (không gây render lại)
+  
+  // 3. Logic Tự động Lưu Lịch sử (Thông minh & Tiết kiệm)
+  // 3. Logic Tự động Lưu Lịch sử (Chỉ lưu 1 bản ghi duy nhất mỗi ngày)
+ 
   const handleUpdate = (field, value) => update(ref(db, `tv_sessions/${user.uid}`), { [field]: value });
 
   const applyTheme = (themeKey) => {
@@ -536,23 +562,8 @@ export default function HomeAdmin() {
     };
   };
 
-  // --- UI: LOGIN ---
-  if (!user) {
-    return (
-      <div style={{ padding: '50px 20px', fontFamily: 'sans-serif', maxWidth: '400px', margin: '0 auto', textAlign: 'center' }}>
-        <h1 style={{ color: '#007acc' }}>GOLD PRICE ADMIN</h1>
-        <button onClick={() => signInWithPopup(auth, googleProvider)} style={{ width: '100%', padding: '12px', background: '#fff', color: '#444', border: '1px solid #ddd', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" /> Đăng nhập Google
-        </button>
-        <div style={{ margin: '15px 0', color: '#ccc', fontSize: '12px' }}>HOẶC DÙNG TÀI KHOẢN ADMIN</div>
-        <form onSubmit={(e) => { e.preventDefault(); signInWithEmailAndPassword(auth, email, password).catch(err => alert("Sai thông tin!")); }} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '5px' }} />
-          <input type="password" placeholder="Mật khẩu" value={password} onChange={e => setPassword(e.target.value)} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '5px' }} />
-          <button type="submit" style={{ padding: '12px', background: '#007acc', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Đăng nhập</button>
-        </form>
-      </div>
-    );
-  }
+  
+  
 
   // --- UI: DASHBOARD ---
   return (

@@ -295,7 +295,7 @@ export default function HomeAdmin() {
         const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        
+
         // Hiển thị gọn: 250n 05:30:15 (n = ngày)
         setTimeLeft(
           `${days > 0 ? days + 'n ' : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
@@ -364,7 +364,7 @@ export default function HomeAdmin() {
     }
   };
 
-   useEffect(() => {
+  useEffect(() => {
     // Chỉ chạy nếu là Pro và có dữ liệu giá
     if (!isPro || !boardData?.prices || boardData.prices.length === 0) return;
 
@@ -434,23 +434,37 @@ export default function HomeAdmin() {
             // NGƯỜI DÙNG MỚI: Tặng 3 ngày Pro
             const trialDays = 3;
             const trialEnds = Date.now() + (trialDays * 24 * 60 * 60 * 1000); // Hiện tại + 3 ngày (ms)
+            get(ref(db, 'global_templates/mau_do_truyen_thong')).then((tmplSnap) => {
+              const defaultTmpl = tmplSnap.exists() ? tmplSnap.val() : {};
 
-            const initialData = {
-              shop_name: "Tiệm Vàng Mới",
-              prices: [],
-              plan: 'trial', // Đánh dấu là đang dùng thử
-              trial_ends: trialEnds,
-              created_at: serverTimestamp()
-            };
+              const initialData = {
+                shop_name: "Tiệm Vàng Mới",
+                prices: [
+                  { name: "VÀNG 9999", mua: "10000000", ban: "10000000" },
+                  { name: "VÀNG 99", mua: "10000000", ban: "10000000" }
+                ],
+                plan: 'trial',
+                trial_ends: trialEnds,
 
-            set(ref(db, `tv_sessions/${currentUser.uid}`), initialData);
-            setBoardData(initialData);
+                // 👇 Gắn sẵn ID và toàn bộ HTML/CSS mặc định vào user mới
+                template_id: 'mau_do_truyen_thong',
+                html_template: defaultTmpl.html_template || "",
+                css_template: defaultTmpl.css_template || "",
+                row_template: defaultTmpl.row_template || "",
+                created_at: serverTimestamp()
+              };
+
+              set(ref(db, `tv_sessions/${currentUser.uid}`), initialData);
+              setBoardData(initialData);
+            }).catch(err => {
+              console.error("Lỗi lấy template mặc định:", err);
+            });
           }
         });
 
         // Lấy kho Template
         onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val()));
-        
+
         // Lấy 10 bản ghi lịch sử mới nhất
         onValue(ref(db, `price_history/${currentUser.uid}`), (snapshot) => {
           if (snapshot.exists()) {
@@ -475,19 +489,19 @@ export default function HomeAdmin() {
 
   if (isCheckingAuth) {
     return (
-       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa' }}>
-         <div style={{ width: '40px', height: '40px', border: '4px solid #007acc', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-         <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa' }}>
+        <div style={{ width: '40px', height: '40px', border: '4px solid #007acc', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   if (!user) return null;
   // 1. Khai báo Ref để ghi nhớ trạng thái (không gây render lại)
-  
+
   // 3. Logic Tự động Lưu Lịch sử (Thông minh & Tiết kiệm)
   // 3. Logic Tự động Lưu Lịch sử (Chỉ lưu 1 bản ghi duy nhất mỗi ngày)
- 
+
   const handleUpdate = (field, value) => update(ref(db, `tv_sessions/${user.uid}`), { [field]: value });
 
   const applyTheme = (themeKey) => {
@@ -562,8 +576,8 @@ export default function HomeAdmin() {
     };
   };
 
-  
-  
+
+
 
   // --- UI: DASHBOARD ---
   return (
@@ -579,7 +593,7 @@ export default function HomeAdmin() {
       {/* BANNER THÔNG TIN PRO/PREMIUM TỔNG HỢP */}
       {(boardData?.trial_ends || boardData?.premium_ends) && (
         <div style={{
-          background: boardData?.plan === 'premium' 
+          background: boardData?.plan === 'premium'
             ? 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%)' // Xanh lá Premium
             : 'linear-gradient(135deg, #e65100 0%, #ef6c00 100%)', // Màu cam Trial
           color: '#fff', padding: '12px 20px', borderRadius: '12px', marginBottom: '20px',
@@ -603,9 +617,9 @@ export default function HomeAdmin() {
 
           <div style={{ textAlign: 'center', flex: 1 }}>
             <div style={{ fontSize: '10px', opacity: 0.7 }}>THỜI GIAN CÒN LẠI</div>
-            <div style={{ 
-              fontSize: '24px', 
-              fontWeight: '900', 
+            <div style={{
+              fontSize: '24px',
+              fontWeight: '900',
               fontFamily: 'monospace',
               letterSpacing: '1px'
             }}>
@@ -613,7 +627,7 @@ export default function HomeAdmin() {
             </div>
           </div>
 
-          <button 
+          <button
             onClick={() => window.location.href = '/premium'}
             style={{
               background: '#fff',
@@ -658,30 +672,48 @@ export default function HomeAdmin() {
         borderRadius: '8px',
         border: '1px solid #dee2e6',
         marginTop: '20px',
-        borderLeft: isPro ? '4px solid #007acc' : '4px solid #ff9800' // Đổi màu viền để phân biệt Pro/Free
+        borderLeft: isPro ? '4px solid #007acc' : '4px solid #ff9800'
       }}>
-        <h3 style={{ marginTop: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          📺 Kết nối Tivi mới
+        <h3 style={{ marginTop: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
+          📺 Đồng bộ giá lên Tivi
           {!isPro && <PremiumGate isPro={isPro} message="PRO" />}
         </h3>
 
-        <p style={{ fontSize: '12px', color: '#666' }}>
-          Nhập 6 số đang hiển thị trên màn hình Tivi của bạn:
-        </p>
+        {/* --- KHUNG HƯỚNG DẪN BƯỚC 1 --- */}
+        <div style={{
+          background: '#fff3cd',
+          color: '#856404',
+          padding: '12px 15px',
+          borderRadius: '6px',
+          fontSize: '13px',
+          marginBottom: '15px',
+          border: '1px solid #ffeeba'
+        }}>
+          <strong style={{ display: 'block', marginBottom: '5px' }}>Bước 1: Trên Tivi của bạn</strong>
+          Mở trình duyệt web (Trình duyệt Internet) trên Tivi và truy cập vào địa chỉ:
+          <div style={{ fontSize: '18px', color: '#d32f2f', fontWeight: 'bold', marginTop: '8px', letterSpacing: '0.5px' }}>
+            {typeof window !== 'undefined' ? window.location.origin : ''}/connect
+          </div>
+        </div>
+
+        {/* --- KHUNG BƯỚC 2 (NHẬP MÃ) --- */}
+        <div style={{ fontSize: '13px', color: '#333', fontWeight: 'bold', marginBottom: '8px' }}>
+          Bước 2: Nhập mã 6 số hiển thị trên Tivi vào ô dưới đây:
+        </div>
 
         <div style={{
           display: 'flex',
           gap: '10px',
           alignItems: 'center',
-          filter: isPro ? 'none' : 'grayscale(100%) opacity(0.6)', // Làm xám và mờ nếu là bản Free
+          filter: isPro ? 'none' : 'grayscale(100%) opacity(0.6)',
         }}>
           <input
             type="text"
             maxLength="6"
-            value={isPro ? pairCode : '******'} // Che mã nếu không phải Pro
+            value={isPro ? pairCode : '******'}
             onChange={(e) => setPairCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="123456"
-            disabled={!isPro} // Khóa input nếu không phải Pro
+            placeholder="Ví dụ: 123456"
+            disabled={!isPro}
             style={{
               flex: 1,
               padding: '12px',
@@ -694,7 +726,6 @@ export default function HomeAdmin() {
             }}
           />
 
-          {/* Dùng PremiumGate bọc nút bấm hoặc thay thế nút bấm */}
           <PremiumGate isPro={isPro} message="Mở khóa kết nối TV">
             <button
               onClick={handlePairTV}
@@ -710,14 +741,14 @@ export default function HomeAdmin() {
                 whiteSpace: 'nowrap'
               }}
             >
-              {isPairing ? '...' : 'KẾT NỐI'}
+              {isPairing ? 'ĐANG XỬ LÝ...' : 'KẾT NỐI NGAY'}
             </button>
           </PremiumGate>
         </div>
 
         {!isPro && (
           <p style={{ fontSize: '11px', color: '#ff9800', marginTop: '10px', fontStyle: 'italic' }}>
-            * Tính năng đồng bộ Tivi thời gian thực yêu cầu tài khoản Premium.
+            * Tính năng kết nối và đồng bộ Tivi thời gian thực yêu cầu tài khoản Premium.
           </p>
         )}
       </div>
@@ -1050,7 +1081,7 @@ export default function HomeAdmin() {
                 <div key={key} style={{ position: 'relative', borderRadius: '8px', border: isActive ? '3px solid #007acc' : '1px solid #ddd', overflow: 'hidden' }}>
                   {/* Vùng xem trước nhỏ */}
                   <div style={{ height: '80px', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                    onClick={() => setPreviewingTemplate(template)}>
+                    onClick={() => setPreviewingTemplate({ ...template, id: key })}>
                     <small style={{ color: '#fff', fontSize: '10px' }}>👁️ Bấm để Xem thử</small>
                     {isLocked && <div style={{ position: 'absolute', top: 5, right: 5 }}>🔒</div>}
                   </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 export default function OpenBBChat({ userId, plan }) {
     const [messages, setMessages] = useState([
@@ -46,7 +47,23 @@ export default function OpenBBChat({ userId, plan }) {
     };
 
     return (
-        <div style={{ background: '#fff', borderRadius: '12px', border: '2px solid #007acc', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '400px', marginBottom: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+        <div style={{
+            background: '#fff',
+            borderRadius: '12px',
+            border: '2px solid #007acc',
+
+
+            resize: 'vertical',      // Cho phép kéo giãn theo chiều dọc
+            overflow: 'hidden',      // Đảm bảo các thành phần con không tràn ra ngoài khi kéo
+            minHeight: '500px',      // Chiều cao tối thiểu khi chưa kéo
+            maxHeight: '900px',      // (Tùy chọn) Giới hạn chiều cao tối đa để không hỏng layout
+
+            display: 'flex',
+            flexDirection: 'column',
+            marginBottom: '20px',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+
+        }}>
             <div style={{ background: '#007acc', color: '#fff', padding: '12px 15px', fontWeight: 'bold', fontSize: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>🤖 TRỢ LÝ PHÂN TÍCH THỊ TRƯỜNG BẰNG TRÍ TUỆ NHÂN TẠO</span>
                 <span style={{ fontSize: '10px', background: 'rgba(255,255,255,0.2)', padding: '2px 6px', borderRadius: '4px' }}>
@@ -65,9 +82,27 @@ export default function OpenBBChat({ userId, plan }) {
                         background: m.role === 'user' ? '#007acc' : '#fff',
                         color: m.role === 'user' ? '#fff' : '#333',
                         border: m.role === 'user' ? 'none' : '1px solid #eee',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
+                        whiteSpace: 'pre-wrap'
                     }}>
-                        {m.text}
+                        {m.role === 'bot' ? (
+                            <ReactMarkdown
+                                components={{
+                                    // Khống chế khoảng cách dòng của đoạn văn
+                                    p: ({ node, ...props }) => <p style={{ margin: '0 0 6px 0', lineHeight: '1' }} {...props} />,
+                                    // Khống chế tiêu đề (###)
+                                    h3: ({ node, ...props }) => <h3 style={{ margin: '12px 0 4px 0', color: '#007acc', fontSize: '16px' }} {...props} />,
+                                    h4: ({ node, ...props }) => <h4 style={{ margin: '10px 0 4px 0', color: '#007acc', fontSize: '14px' }} {...props} />,
+                                    // Khống chế danh sách (gạch đầu dòng)
+                                    ul: ({ node, ...props }) => <ul style={{ margin: '0 0 8px 0', paddingLeft: '20px' }} {...props} />,
+                                    li: ({ node, ...props }) => <li style={{ marginBottom: '2px' }} {...props} />,
+                                }}
+                            >
+                                {m.text}
+                            </ReactMarkdown>
+                        ) : (
+                            m.text
+                        )}
                     </div>
                 ))}
                 {loading && <div style={{ fontSize: '12px', color: '#888', paddingLeft: '5px' }}>AI đang xử lý...</div>}

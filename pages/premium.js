@@ -55,7 +55,7 @@ export default function PremiumPage() {
   const getQRUrl = (plan) => {
     const STK = "9704229244878273"; 
     const BANK = "MB"; 
-    const memo = `GP ${plan.code} ${shortUid}`;
+    const memo = `GP${plan.code}${shortUid}`;
     return `https://img.vietqr.io/image/${BANK}-${STK}-compact.png?amount=${plan.amount}&addInfo=${memo}&accountName=NGUYEN%20HUU%20NHAN`;
   };
 

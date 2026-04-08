@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase, ref, get, update, set, onValue, push, serverTimestamp } from 'firebase/database';
 import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/router';
+import OpenBBChat from './openbb';
 
 
 // 1. Cấu hình Firebase
@@ -273,6 +274,7 @@ export default function HomeAdmin() {
 
   // --- LOGIC ĐẾM NGƯỢC CHUẨN (LUÔN ĐỌC TỪ DB) ---
   const [timeLeft, setTimeLeft] = useState("");
+
 
   useEffect(() => {
     // Lấy mốc thời gian hết hạn thực tế từ DB (Ưu tiên Premium, sau đó là Trial)
@@ -991,7 +993,8 @@ export default function HomeAdmin() {
           })}
         </div>
 
-
+        {/* KHỐI AI OPENBB */}
+        <OpenBBChat userId={user.uid} plan={isPro ? 'pro' : 'free'} />
 
         {/* KHỐI 2: CẬP NHẬT GIÁ (Tự động thêm dấu chấm phần ngàn) */}
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #333' }}>

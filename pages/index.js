@@ -518,24 +518,53 @@ export default function HomeAdmin() {
     alert("Đã đổi giao diện: " + theme.name);
   };
 
-  const downloadAllHistory = () => {
-    if (!isPro) return alert("Vui lòng nâng cấp Premium để tải dữ liệu!"); // Check quyền ở đây
+  const downloadAllHistory = async () => {
+  if (!isPro) return alert("Vui lòng nâng cấp Premium để tải dữ liệu!");
 
-    let csv = "\uFEFFNgày giờ,Loại vàng,Mua vào,Bán ra\n"; // BOM để hiện đúng tiếng Việt
+  try {
+    // 1. Chọc trực tiếp vào DB để lấy bản FULL, không dùng biến 'history' đang bị giới hạn
+    const historyRef = ref(db, `price_history/${user.uid}`);
+    const snapshot = await get(historyRef);
 
-    // Gom tất cả các phiên bản trong history vào 1 file
-    history.forEach(item => {
-      (item.prices || []).forEach(p => {
-        csv += `${item.dateString},${p.name},${p.mua},${p.ban}\n`;
+    if (!snapshot.exists()) {
+      return alert("Chưa có dữ liệu lịch sử để tải!");
+    }
+
+    const allData = snapshot.val();
+    
+    // 2. Chuyển đổi object từ Firebase thành mảng và sắp xếp theo thời gian
+    const sortedRecords = Object.entries(allData)
+      .map(([id, val]) => ({ id, ...val }))
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    // 3. Xây dựng nội dung CSV từ toàn bộ dữ liệu
+    let csv = "\uFEFFNgày giờ,Loại vàng,Mua vào,Bán ra\n"; // BOM để hiện đúng tiếng Việt trong Excel
+
+    sortedRecords.forEach(record => {
+      (record.prices || []).forEach(p => {
+        // Thay thế dấu phẩy nếu có trong tên vàng để tránh lỗi định dạng CSV
+        const safeName = String(p.name).replace(/,/g, '');
+        csv += `${record.dateString},${safeName},${p.mua},${p.ban}\n`;
       });
     });
 
+    // 4. Tạo file và tải về
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
+    const fileName = `LichSuGia_ToanBo_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.csv`;
+    
     link.href = URL.createObjectURL(blob);
-    link.download = `ToanBoLichSuGia.csv`;
+    link.download = fileName;
     link.click();
-  };
+    
+    // Giải phóng bộ nhớ
+    URL.revokeObjectURL(link.href);
+
+  } catch (error) {
+    console.error("Lỗi khi tải lịch sử:", error);
+    alert("Có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại!");
+  }
+};
 
   const quickApplyPrice = (item) => {
     if (!isPro) return alert("Nâng cấp Premium để sử dụng tính năng 'Copy' giá nhanh!");

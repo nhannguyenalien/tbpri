@@ -1023,7 +1023,7 @@ export default function HomeAdmin() {
         </div>
 
         {/* KHỐI AI OPENBB */}
-        <OpenBBChat userId={user.uid} plan={isPro ? 'pro' : 'free'} />
+        {/* <OpenBBChat userId={user.uid} plan={isPro ? 'pro' : 'free'} /> */}
 
         {/* KHỐI 2: CẬP NHẬT GIÁ (Tự động thêm dấu chấm phần ngàn) */}
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '2px solid #333' }}>

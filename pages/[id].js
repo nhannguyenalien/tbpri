@@ -92,9 +92,7 @@ let html = data.html_template || "";
 let rowT = data.row_template || "";
 let rowsHtml = "";
 
-const mText = isPro
-? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!")
-: "Chúc Quý Khách Phát Tài Phát Lộc!";
+const mText = data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
 
 const displayPrices = data.prices || [];
 

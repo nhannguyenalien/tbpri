@@ -799,19 +799,21 @@ export default function HomeAdmin() {
             <input type="text" value={boardData?.shop_phone || ''} onChange={(e) => handleUpdate('shop_phone', e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }} placeholder="Số điện thoại hiển thị" />
 
             <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
-              Chữ chạy thông báo: {!isPro && <span style={{ color: 'orange' }}>🔒 Chỉ dành cho Pro</span>}
-              <PremiumGate isPro={isPro} message="Mở khóa tính năng này" />
+              Chữ chạy thông báo:
             </label>
             <input
               type="text"
-              disabled={!isPro}
-              value={isPro ? (boardData?.marquee_text || '') : 'Chúc Quý Khách Phát Tài Phát Lộc!'}
+              value={boardData?.marquee_text || ''}
               onChange={(e) => handleUpdate('marquee_text', e.target.value)}
               style={{
-                width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '4px',
-                background: isPro ? '#fff' : '#f0f0f0', cursor: isPro ? 'text' : 'not-allowed'
+                width: '100%', 
+                padding: '10px', 
+                border: '1px solid #ddd', 
+                borderRadius: '4px',
+                background: '#fff', 
+                cursor: 'text'
               }}
-              placeholder={isPro ? "Nhập nội dung thông báo..." : "Nâng cấp Premium để tùy chỉnh chữ chạy"}
+              placeholder="Nhập nội dung thông báo hiển thị trên TV..."
             />
           </div>
         </div>

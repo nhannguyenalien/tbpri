@@ -176,8 +176,12 @@ if (grid) grid.innerHTML = rowsHtml;
 const marquee = document.querySelector('marquee');
 if (marquee) {
     const newMarquee = boardData.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
-    if (marquee.innerHTML !== newMarquee) {
-        marquee.innerHTML = newMarquee;
+    
+    // CÁCH ỔN ĐỊNH NHẤT: Tìm thẻ con bên trong để nhét chữ (nếu có), không làm mất cấu trúc CSS.
+    // Nếu không có thẻ con, nó sẽ tự update thẳng vào marquee. Dùng innerText để tối ưu RAM TV.
+    const textNode = marquee.querySelector('*') || marquee;
+    if (textNode.innerText !== newMarquee) {
+        textNode.innerText = newMarquee;
     }
 }
 

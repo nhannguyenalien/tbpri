@@ -139,10 +139,17 @@ if (isFirstRender.current || lastRenderHash.current !== currentHash) {
 // ====================================================
 const container = document.getElementById('display-board');
 if (container) {
-container.innerHTML = `
-<style id="template-style">${boardData.css_template || ""}</style>
-<div class="template-content">${fullHTML}</div>
-`;
+    // 1. BÓC CSS ĐẨY THẲNG LÊN <HEAD> CỦA TRÌNH DUYỆT
+    let styleTag = document.getElementById('tv-dynamic-style');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'tv-dynamic-style';
+        document.head.appendChild(styleTag);
+    }
+    styleTag.innerHTML = boardData.css_template || "";
+
+    // 2. CHỈ RENDER HTML VÀO BẢNG GIÁ (BỎ THẺ <STYLE> ĐI)
+    container.innerHTML = `<div class="template-content">${fullHTML}</div>`;
 
 // Lưu data-src cho tất cả iframe ngay sau khi render
 // để timer reload có src gốc mà dùng

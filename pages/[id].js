@@ -187,8 +187,8 @@ if (marquee) {
     // CÁCH ỔN ĐỊNH NHẤT: Tìm thẻ con bên trong để nhét chữ (nếu có), không làm mất cấu trúc CSS.
     // Nếu không có thẻ con, nó sẽ tự update thẳng vào marquee. Dùng innerText để tối ưu RAM TV.
     const textNode = marquee.querySelector('*') || marquee;
-    if (textNode.innerText !== newMarquee) {
-        textNode.innerText = newMarquee;
+    if (textNode.textContent !== newMarquee) {
+        textNode.textContent = newMarquee;
     }
 }
 

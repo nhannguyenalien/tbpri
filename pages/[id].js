@@ -96,9 +96,7 @@ const mText = isPro
 ? (data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!")
 : "Chúc Quý Khách Phát Tài Phát Lộc!";
 
-const displayPrices = isPro
-? (data.prices || [])
-: (data.prices || []).slice(0, 4);
+const displayPrices = data.prices || [];
 
 displayPrices.forEach(p => {
 rowsHtml += rowT

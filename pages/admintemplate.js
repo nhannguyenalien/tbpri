@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, remove } from 'firebase/database';
+import { getDatabase, ref, onValue, set, remove, get, update } from 'firebase/database';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import Editor from '@monaco-editor/react';
 
@@ -78,6 +78,42 @@ export default function AdminTemplate() {
     set(ref(db, `global_templates/${form.id}`), {
       name: form.name, css_template: form.css, html_template: form.html, row_template: form.row
     }).then(() => alert("Đã lưu!"));
+  };
+
+  const syncToAllTVs = async () => {
+    if (!form.id) return alert("Vui lòng chọn một mẫu để đồng bộ!");
+    
+    // Hỏi lại cho chắc chắn tránh lỡ tay bấm nhầm
+    if (!confirm(`Bạn có chắc muốn chép đè giao diện này lên TOÀN BỘ Tivi đang dùng mẫu "${form.id}" không?`)) return;
+
+    try {
+      const sessionsSnapshot = await get(ref(db, 'tv_sessions'));
+      if (sessionsSnapshot.exists()) {
+        const sessions = sessionsSnapshot.val();
+        const updates = {};
+        let affectedTVs = 0;
+
+        // Quét toàn bộ khách hàng
+        Object.entries(sessions).forEach(([uid, sessionData]) => {
+          if (sessionData.template_id === form.id) {
+            updates[`tv_sessions/${uid}/css_template`] = form.css;
+            updates[`tv_sessions/${uid}/html_template`] = form.html;
+            updates[`tv_sessions/${uid}/row_template`] = form.row;
+            affectedTVs++;
+          }
+        });
+
+        if (affectedTVs > 0) {
+          await update(ref(db), updates);
+          alert(`✅ Đã ép đồng bộ thành công tới ${affectedTVs} màn hình Tivi!`);
+        } else {
+          alert(`⚠️ Hiện tại chưa có Tivi nào cài đặt mẫu này.`);
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi đồng bộ:", err);
+      alert("Lỗi hệ thống: " + err.message);
+    }
   };
 
   const duplicate = () => {
@@ -164,7 +200,14 @@ export default function AdminTemplate() {
             <Editor theme="light" language="html" value={form.row} onChange={(val) => setForm({...form, row: val})} options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers:'off' }} />
           </div>
 
-          <button onClick={save} style={{ padding:'12px', background:'#007acc', color:'#fff', border:'none', cursor:'pointer', fontWeight:'bold', borderRadius:'4px' }}>💾 LƯU DATABASE</button>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button onClick={save} style={{ flex: 1, padding:'12px', background:'#007acc', color:'#fff', border:'none', cursor:'pointer', fontWeight:'bold', borderRadius:'4px' }}>
+              💾 LƯU DATABASE
+            </button>
+            <button onClick={syncToAllTVs} style={{ flex: 1, padding:'12px', background:'#ff9800', color:'#fff', border:'none', cursor:'pointer', fontWeight:'bold', borderRadius:'4px' }}>
+              🔄 ĐỒNG BỘ TIVI
+            </button>
+          </div>
         </div>
 
         {/* RESIZER 2 */}

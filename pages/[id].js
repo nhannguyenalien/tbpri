@@ -46,6 +46,12 @@ const board = document.getElementById('display-board');
 if (board) board.style.zoom = next;
 };
 
+const fullScreen = () => {
+  document.documentElement.requestFullscreen();
+};
+
+
+
 // --- LOGIC 3: TIMER RELOAD ---
 useEffect(() => {
 // 1. Reload toàn trang mỗi 30 phút — giải phóng RAM TV
@@ -230,6 +236,7 @@ localStorage.removeItem('tv_zoom_level');
 const board = document.getElementById('display-board');
 if (board) board.style.zoom = 1;
 }} style={{ ...btnStyle, fontSize: '10px' }}>100%</button>
+<button onClick={fullScreen} style={btnStyle}>⛶</button>
 </div>
 
 {/* VÙNG HIỂN THỊ CHÍNH */}

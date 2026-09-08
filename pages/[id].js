@@ -198,11 +198,12 @@ badge.remove();
 };
 
 const CONN_ERR_HTML =
-'<div style="text-align:center;padding-top:18%;color:#fff;font-family:sans-serif;line-height:1.6">' +
-'<div style="font-size:22px;margin-bottom:8px">Không kết nối được máy chủ giá</div>' +
-'<div style="font-size:15px;opacity:.85">Mạng WiFi có thể đang chặn kết nối.<br>' +
+'<div style="position:fixed;inset:0;background:#0a1f3d;color:#fff;font-family:sans-serif;' +
+'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.6;padding:24px">' +
+'<div style="font-size:26px;margin-bottom:10px;font-weight:700">Không kết nối được máy chủ giá</div>' +
+'<div style="font-size:17px;opacity:.9">Mạng WiFi có thể đang chặn kết nối.<br>' +
 'Thử tắt WiFi dùng 4G, hoặc đổi DNS về 8.8.8.8 / 1.1.1.1.</div>' +
-'<div style="font-size:13px;opacity:.6;margin-top:14px">Hệ thống đang tự thử lại…</div>' +
+'<div style="font-size:14px;opacity:.6;margin-top:16px">Hệ thống đang tự thử lại…</div>' +
 '</div>';
 
 // --- LOGIC 5: FIREBASE REALTIME + CACHE CHỐNG TRẮNG MÀN HÌNH ---
@@ -311,8 +312,9 @@ transition: 'zoom 0.1s ease-out'
 }}
 >
 <div style={{
-textAlign: 'center', paddingTop: '20%',
-color: '#fff', fontFamily: 'sans-serif'
+position: 'fixed', inset: 0, background: '#0a1f3d',
+display: 'flex', alignItems: 'center', justifyContent: 'center',
+textAlign: 'center', color: '#fff', fontFamily: 'sans-serif', fontSize: '20px'
 }}>
 Đang kết nối bảng giá...
 </div>

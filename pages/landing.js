@@ -1,5 +1,4 @@
 import { motion } from 'motion/react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
     CheckCircle2,
     Smartphone,
@@ -27,19 +26,8 @@ import {
     getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, onAuthStateChanged, RecaptchaVerifier,
     signInWithPhoneNumber
 } from 'firebase/auth';
+import '../lib/firebase'; // khởi tạo Firebase app mặc định cho getAuth()
 
-// Trong danh sách import từ 'lucide-react', hãy thêm chữ X vào cuối để dùng làm nút tắt popup:
-const firebaseConfig = {
-    apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
-    authDomain: "pricegold-4925d.firebaseapp.com",
-    databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "pricegold-4925d",
-    storageBucket: "pricegold-4925d.firebasestorage.app",
-    messagingSenderId: "982593294309",
-    appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
-};
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export default function Landing() {
     const router = useRouter();
     // --- STATE ---

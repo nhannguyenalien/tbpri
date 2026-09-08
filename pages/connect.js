@@ -1,19 +1,6 @@
 import { useState, useEffect } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, set, onValue, remove } from 'firebase/database';
-
-const firebaseConfig = {
-    apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
-    authDomain: "pricegold-4925d.firebaseapp.com",
-    databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "pricegold-4925d",
-    storageBucket: "pricegold-4925d.firebasestorage.app",
-    messagingSenderId: "982593294309",
-    appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
-};
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getDatabase(app);
+import { ref, set, onValue, remove } from 'firebase/database';
+import { db } from '../lib/firebase';
 
 export default function TVConnect() {
     const [pairingCode, setPairingCode] = useState('');

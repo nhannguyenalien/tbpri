@@ -1,22 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, remove, get, update } from 'firebase/database';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { ref, onValue, set, remove, get, update } from 'firebase/database';
+import { onAuthStateChanged } from 'firebase/auth';
 import Editor from '@monaco-editor/react';
+import { db } from '../lib/firebase';
+import { auth } from '../lib/auth';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
-  authDomain: "pricegold-4925d.firebaseapp.com",
-  databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "pricegold-4925d",
-  storageBucket: "pricegold-4925d.firebasestorage.app",
-  messagingSenderId: "982593294309",
-  appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
-};
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getDatabase(app);
-const auth = getAuth(app);
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2";
 
 const SAMPLE_DATA = {

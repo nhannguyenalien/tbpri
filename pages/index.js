@@ -1,25 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, get, update, set, onValue, push, serverTimestamp } from 'firebase/database';
-import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { ref, get, update, set, onValue, push, serverTimestamp } from 'firebase/database';
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/router';
 import OpenBBChat from './openbb';
+import { db } from '../lib/firebase';
+import { auth } from '../lib/auth';
 
-
-// 1. Cấu hình Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0",
-  authDomain: "pricegold-4925d.firebaseapp.com",
-  databaseURL: "https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "pricegold-4925d",
-  storageBucket: "pricegold-4925d.firebasestorage.app",
-  messagingSenderId: "982593294309",
-  appId: "1:982593294309:web:5120ab6d735aeadde8a90c"
-};
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getDatabase(app);
-const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const ADMIN_UID = "mdEgge6YZcXO1RQmfKIZZaLRidF2"; // UID Admin của Nhan
 

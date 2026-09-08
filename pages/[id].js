@@ -123,38 +123,27 @@ const fullHTML = html
 return { fullHTML, rowsHtml };
 };
 
-// --- LOGIC 5: FIREBASE REALTIME ---
-useEffect(() => {
-if (!router.isReady) return;
-const { id } = router.query;
-if (!id) return;
+// Hash để phát hiện đổi template (giữ nguyên công thức cũ).
+const computeHash = (d) =>
+`${d.template_id}_${d.shop_name}_${d.shop_address}_${d.shop_phone}_${(d.css_template || "").length}`;
 
-const boardRef = ref(db, `tv_sessions/${id}`);
-const unsubscribe = onValue(boardRef, (snapshot) => {
-if (!snapshot.exists()) return;
-const boardData = snapshot.val();
+// Vẽ bảng giá lên DOM. Dùng chung cho: dữ liệu cache lúc mở trang + dữ liệu realtime.
+const paintBoard = (boardData) => {
+if (!boardData) return;
 const { fullHTML, rowsHtml } = renderBoard(boardData);
-const currentHash = `${boardData.template_id}_${boardData.shop_name}_${boardData.shop_address}_${boardData.shop_phone}_${(boardData.css_template || "").length}`;
+const currentHash = computeHash(boardData);
 if (isFirstRender.current || lastRenderHash.current !== currentHash) {
-// ====================================================
-// LẦN ĐẦU hoặc ĐỔI TEMPLATE: Render full HTML
-// ====================================================
+// LẦN ĐẦU hoặc ĐỔI TEMPLATE: render full HTML
 const container = document.getElementById('display-board');
 if (container) {
-    // 1. BÓC CSS ĐẨY THẲNG LÊN <HEAD> CỦA TRÌNH DUYỆT
-    let styleTag = document.getElementById('tv-dynamic-style');
-    if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = 'tv-dynamic-style';
-        document.head.appendChild(styleTag);
-    }
-    styleTag.innerHTML = boardData.css_template || "";
-
-    // 2. CHỈ RENDER HTML VÀO BẢNG GIÁ (BỎ THẺ <STYLE> ĐI)
-    container.innerHTML = `<div class="template-content">${fullHTML}</div>`;
-
-// Lưu data-src cho tất cả iframe ngay sau khi render
-// để timer reload có src gốc mà dùng
+let styleTag = document.getElementById('tv-dynamic-style');
+if (!styleTag) {
+styleTag = document.createElement('style');
+styleTag.id = 'tv-dynamic-style';
+document.head.appendChild(styleTag);
+}
+styleTag.innerHTML = boardData.css_template || "";
+container.innerHTML = `<div class="template-content">${fullHTML}</div>`;
 container.querySelectorAll('iframe').forEach(iframe => {
 if (!iframe.getAttribute('data-src')) {
 iframe.setAttribute('data-src', iframe.src);
@@ -163,48 +152,122 @@ iframe.setAttribute('data-src', iframe.src);
 }
 isFirstRender.current = false;
 lastRenderHash.current = currentHash;
-
 } else {
-// ====================================================
-// CHỈ CẬP NHẬT GIÁ: KHÔNG overwrite container
-// → Iframe TradingView sống sót, không bị kill
-// ====================================================
-
-// Thử tìm tbody trước (template dạng table)
+// CHỈ CẬP NHẬT GIÁ: không overwrite container → iframe TradingView sống sót
 const tbody = document.querySelector('.price-table tbody');
 if (tbody) {
 tbody.innerHTML = rowsHtml;
 } else {
-// Fallback: template dạng grid hoặc custom
 const grid = document.querySelector('.grid-container') ||
 document.querySelector('.price-table');
 if (grid) grid.innerHTML = rowsHtml;
 }
-
-// Cập nhật marquee nếu thay đổi
 const marquee = document.querySelector('marquee');
 if (marquee) {
-    const newMarquee = boardData.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
-    
-    // CÁCH ỔN ĐỊNH NHẤT: Tìm thẻ con bên trong để nhét chữ (nếu có), không làm mất cấu trúc CSS.
-    // Nếu không có thẻ con, nó sẽ tự update thẳng vào marquee. Dùng innerText để tối ưu RAM TV.
-    const textNode = marquee.querySelector('*') || marquee;
-    if (textNode.textContent !== newMarquee) {
-        textNode.textContent = newMarquee;
-    }
+const newMarquee = boardData.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
+const textNode = marquee.querySelector('*') || marquee;
+if (textNode.textContent !== newMarquee) {
+textNode.textContent = newMarquee;
 }
-
-// Cập nhật ngày
+}
 const dateEl = document.getElementById('current-date');
 if (dateEl) {
 const now = new Date();
 dateEl.innerText = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 }
 }
+};
+
+// Báo mất kết nối máy chủ — KHÔNG xoá bảng giá đang hiển thị.
+const setConnLost = (lost) => {
+let badge = document.getElementById('tv-conn-badge');
+if (lost) {
+if (!badge) {
+badge = document.createElement('div');
+badge.id = 'tv-conn-badge';
+badge.style.cssText =
+'position:fixed;left:12px;bottom:12px;z-index:99999;background:rgba(180,30,30,.92);' +
+'color:#fff;font:600 13px/1.35 sans-serif;padding:6px 12px;border-radius:8px;' +
+'box-shadow:0 4px 14px rgba(0,0,0,.4)';
+badge.textContent = '⚠ Mất kết nối máy chủ — đang hiển thị giá lưu tạm';
+document.body.appendChild(badge);
+}
+} else if (badge) {
+badge.remove();
+}
+};
+
+const CONN_ERR_HTML =
+'<div style="text-align:center;padding-top:18%;color:#fff;font-family:sans-serif;line-height:1.6">' +
+'<div style="font-size:22px;margin-bottom:8px">Không kết nối được máy chủ giá</div>' +
+'<div style="font-size:15px;opacity:.85">Mạng WiFi có thể đang chặn kết nối.<br>' +
+'Thử tắt WiFi dùng 4G, hoặc đổi DNS về 8.8.8.8 / 1.1.1.1.</div>' +
+'<div style="font-size:13px;opacity:.6;margin-top:14px">Hệ thống đang tự thử lại…</div>' +
+'</div>';
+
+// --- LOGIC 5: FIREBASE REALTIME + CACHE CHỐNG TRẮNG MÀN HÌNH ---
+useEffect(() => {
+if (!router.isReady) return;
+const { id } = router.query;
+if (!id) return;
+
+const cacheKey = `tv_cache_${id}`;
+
+// 1. Vẽ ngay bằng dữ liệu lần trước (nếu có) — TV không bị trắng khi mạng chặn Firebase.
+try {
+const raw = localStorage.getItem(cacheKey);
+if (raw) {
+const cached = JSON.parse(raw);
+if (cached && cached.v) {
+paintBoard(cached.v);
+console.info('[tv] hiển thị từ cache, lưu lúc', cached.ts ? new Date(cached.ts).toLocaleString('vi-VN') : '?');
+}
+} else {
+console.info('[tv] chưa có cache, chờ máy chủ');
+}
+} catch (e) { /* cache hỏng thì bỏ qua */ }
+
+// 2. Sau 15s vẫn trống → hiện thông báo lỗi rõ ràng (vẫn tự thử lại ngầm).
+const connTimeout = setTimeout(() => {
+if (isFirstRender.current) {
+const container = document.getElementById('display-board');
+if (container) container.innerHTML = CONN_ERR_HTML;
+}
+}, 15000);
+
+// 3. Lắng nghe realtime.
+const boardRef = ref(db, `tv_sessions/${id}`);
+const unsubscribe = onValue(
+boardRef,
+(snapshot) => {
+if (!snapshot.exists()) return;
+const boardData = snapshot.val();
+paintBoard(boardData);
+try {
+localStorage.setItem(cacheKey, JSON.stringify({ v: boardData, ts: Date.now() }));
+} catch (e) { /* hết quota thì bỏ qua */ }
+},
+(error) => {
+console.warn('Firebase onValue error:', error && error.message);
+if (isFirstRender.current) {
+const container = document.getElementById('display-board');
+if (container) container.innerHTML = CONN_ERR_HTML;
+}
+}
+);
+
+// 4. Theo dõi trạng thái kết nối để hiện/ẩn badge "mất kết nối".
+const unsubConn = onValue(ref(db, '.info/connected'), (s) => {
+if (s.val() === true) setConnLost(false);
+else if (!isFirstRender.current) setConnLost(true);
 });
 
-return () => unsubscribe();
-}, [router.isReady, router.query]);
+return () => {
+clearTimeout(connTimeout);
+unsubscribe();
+unsubConn();
+};
+}, [router.isReady, router.query.id]);
 
 // --- STYLE NÚT ZOOM ---
 const btnStyle = {

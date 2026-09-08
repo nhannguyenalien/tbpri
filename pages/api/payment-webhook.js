@@ -17,7 +17,8 @@ const db = getDatabase(app);
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
-  const SECRET_TOKEN = "NHAN_GOLD_2026"; 
+  // Ưu tiên biến môi trường; giữ fallback để bản đang chạy không gãy trước khi set env trên Vercel.
+  const SECRET_TOKEN = process.env.WEBHOOK_SECRET || "NHAN_GOLD_2026";
   const { content, token } = req.body;
 
   if (token !== SECRET_TOKEN) return res.status(401).json({ message: 'Unauthorized' });
@@ -54,18 +55,29 @@ export default async function handler(req, res) {
     if (!fullUid) return res.status(200).json({ status: 'error', message: 'User không tồn tại' });
 
     // 5. Tính toán cộng dồn hạn dùng
+    // App đọc field `premium_ends` (index.js / premium.js), field `expiry_date` cũ không nơi nào đọc.
+    // -> lấy mốc cũ = max(premium_ends, expiry_date) và GHI CẢ HAI field cùng giá trị (additive, không phá user cũ).
     const now = Date.now();
-    const userSnap = await get(ref(db, `tv_sessions/${fullUid}/expiry_date`));
-    const currentExpiry = (userSnap.exists() && userSnap.val() > now) ? userSnap.val() : now;
-    
+    const [premEndsSnap, legacySnap] = await Promise.all([
+      get(ref(db, `tv_sessions/${fullUid}/premium_ends`)),
+      get(ref(db, `tv_sessions/${fullUid}/expiry_date`)),
+    ]);
+    const prevExpiry = Math.max(
+      Number(premEndsSnap.val()) || 0,
+      Number(legacySnap.val()) || 0
+    );
+    const currentExpiry = prevExpiry > now ? prevExpiry : now;
+
     const updateData = {
       last_pay: amountVal,
       last_pay_date: new Date().toLocaleString('vi-VN')
     };
 
     if (daysToAdd > 0) {
+      const newExpiry = currentExpiry + (daysToAdd * 24 * 60 * 60 * 1000);
       updateData.plan = 'premium';
-      updateData.expiry_date = currentExpiry + (daysToAdd * 24 * 60 * 60 * 1000);
+      updateData.premium_ends = newExpiry; // field app thực sự dùng
+      updateData.expiry_date = newExpiry;  // giữ đồng bộ field cũ
     }
 
     if (isCustomDesign) {
@@ -74,10 +86,10 @@ export default async function handler(req, res) {
 
     await update(ref(db, `tv_sessions/${fullUid}`), updateData);
 
-    return res.status(200).json({ 
-      status: 'success', 
+    return res.status(200).json({
+      status: 'success',
       package: isCustomDesign ? "Thiết kế riêng" : `${daysToAdd} ngày`,
-      expiry: updateData.expiry_date ? new Date(updateData.expiry_date).toLocaleString('vi-VN') : 'N/A'
+      expiry: updateData.premium_ends ? new Date(updateData.premium_ends).toLocaleString('vi-VN') : 'N/A'
     });
 
   } catch (error) {

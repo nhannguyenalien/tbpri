@@ -405,7 +405,17 @@ export default function HomeAdmin() {
 
   // 2. Lắng nghe trạng thái User và Dữ liệu
   useEffect(() => {
-    return onAuthStateChanged(auth, (currentUser) => {
+    // Gom các listener dữ liệu để dọn đúng cách (trước đây bị rò rỉ mỗi lần
+    // đổi trạng thái đăng nhập / refresh token).
+    let dataUnsubs = [];
+    const clearData = () => {
+      dataUnsubs.forEach((fn) => { try { fn(); } catch (e) {} });
+      dataUnsubs = [];
+    };
+
+    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+      clearData(); // bỏ listener cũ trước khi gắn mới / khi đăng xuất
+
       if (!currentUser) {
         // --- NẾU CHƯA ĐĂNG NHẬP: Lập tức đá sang trang Landing ---
         router.push('/landing');
@@ -415,7 +425,7 @@ export default function HomeAdmin() {
         setIsCheckingAuth(false); // Quan trọng: Báo cho app biết đã kiểm tra xong để tắt loading
 
         // Lấy giá hiện tại trên Tivi
-        onValue(ref(db, `tv_sessions/${currentUser.uid}`), (s) => {
+        dataUnsubs.push(onValue(ref(db, `tv_sessions/${currentUser.uid}`), (s) => {
           if (s.exists()) {
             setBoardData(s.val());
           } else {
@@ -448,13 +458,13 @@ export default function HomeAdmin() {
               console.error("Lỗi lấy template mặc định:", err);
             });
           }
-        });
+        }));
 
         // Lấy kho Template
-        onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val()));
+        dataUnsubs.push(onValue(ref(db, 'global_templates'), (s) => s.exists() && setGlobalTemplates(s.val())));
 
         // Lấy 10 bản ghi lịch sử mới nhất
-        onValue(ref(db, `price_history/${currentUser.uid}`), (snapshot) => {
+        dataUnsubs.push(onValue(ref(db, `price_history/${currentUser.uid}`), (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.val();
             const sorted = Object.entries(data)
@@ -462,17 +472,22 @@ export default function HomeAdmin() {
               .sort((a, b) => b.timestamp - a.timestamp);
             setHistory(sorted.slice(0, 10));
           }
-        });
+        }));
 
         // Lấy giá các nguồn ngoài
-        onValue(ref(db, 'external_prices/sources'), (snapshot) => {
+        dataUnsubs.push(onValue(ref(db, 'external_prices/sources'), (snapshot) => {
           if (snapshot.exists()) {
             setExternalPrices(snapshot.val());
           }
-        });
+        }));
 
       } // ---> ĐÂY LÀ DẤU NGOẶC ĐÓNG CỦA KHỐI ELSE BỊ THIẾU <---
     });
+
+    return () => {
+      unsubAuth();
+      clearData();
+    };
   }, [router]); // Thêm router vào đây để React không cảnh báo
 
   if (isCheckingAuth) {

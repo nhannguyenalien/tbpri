@@ -83,6 +83,15 @@ clearInterval(iframeReload);
 };
 }, []);
 
+// Escape HTML cho các field khách tự nhập (chống XSS khi ghép vào template).
+// Dùng hàm replacer (() => value) để giá trị có ký tự '$' không bị hiểu là pattern.
+const esc = (v) => String(v == null ? "" : v)
+.replace(/&/g, "&amp;")
+.replace(/</g, "&lt;")
+.replace(/>/g, "&gt;")
+.replace(/"/g, "&quot;")
+.replace(/'/g, "&#39;");
+
 // --- LOGIC 4: RENDER BOARD ---
 const renderBoard = (data) => {
 if (!data) return { fullHTML: "", rowsHtml: "" };
@@ -97,22 +106,25 @@ const mText = data.marquee_text || "Chúc Quý Khách Phát Tài Phát Lộc!";
 const displayPrices = data.prices || [];
 
 displayPrices.forEach(p => {
+const loai = esc(p.name || "");
+const mua = formatVND(p.mua); // chỉ còn chữ số + dấu chấm -> an toàn
+const ban = formatVND(p.ban);
 rowsHtml += rowT
-.replace(/{{LOAI_VANG}}/g, p.name || "")
-.replace(/{{GIA_MUA}}/g, formatVND(p.mua))
-.replace(/{{GIA_BAN}}/g, formatVND(p.ban));
+.replace(/{{LOAI_VANG}}/g, () => loai)
+.replace(/{{GIA_MUA}}/g, () => mua)
+.replace(/{{GIA_BAN}}/g, () => ban);
 });
 
 const now = new Date();
 const dateStr = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
 const fullHTML = html
-.replace(/{{SHOP_NAME}}/g, data.shop_name || "TIỆM VÀNG")
-.replace(/{{SHOP_ADDRESS}}/g, data.shop_address || "")
-.replace(/{{SHOP_PHONE}}/g, data.shop_phone || "")
-.replace(/{{CURRENT_DATE}}/g, dateStr)
-.replace(/{{MARQUEE_TEXT}}/g, mText)
-.replace(/{{PRICE_LIST}}/g, rowsHtml);
+.replace(/{{SHOP_NAME}}/g, () => esc(data.shop_name || "TIỆM VÀNG"))
+.replace(/{{SHOP_ADDRESS}}/g, () => esc(data.shop_address || ""))
+.replace(/{{SHOP_PHONE}}/g, () => esc(data.shop_phone || ""))
+.replace(/{{CURRENT_DATE}}/g, () => dateStr)
+.replace(/{{MARQUEE_TEXT}}/g, () => esc(mText))
+.replace(/{{PRICE_LIST}}/g, () => rowsHtml);
 
 return { fullHTML, rowsHtml };
 };

@@ -37,7 +37,14 @@ const fullScreen = () => {
   document.documentElement.requestFullscreen();
 };
 
-
+// --- ĐỒNG HỒ REALTIME (#clock nằm trong template HTML từ RTDB) ---
+useEffect(() => {
+const t = setInterval(() => {
+const el = document.getElementById('clock');
+if (el) el.innerText = new Date().toLocaleTimeString('vi-VN');
+}, 1000);
+return () => clearInterval(t);
+}, []);
 
 // --- LOGIC 3: TIMER RELOAD ---
 useEffect(() => {
@@ -307,15 +314,6 @@ textAlign: 'center', color: '#fff', fontFamily: 'sans-serif', fontSize: '20px'
 </div>
 </div>
 
-{/* Clock Realtime */}
-<script dangerouslySetInnerHTML={{
-__html: `
-setInterval(() => {
-const el = document.getElementById('clock');
-if (el) el.innerText = new Date().toLocaleTimeString('vi-VN');
-}, 1000);
-`
-}} />
 </div>
 );
 } 

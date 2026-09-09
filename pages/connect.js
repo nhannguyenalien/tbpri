@@ -17,7 +17,12 @@ export default function TVConnect() {
         setPairingCode(code);
 
         const codeRef = ref(db, `pairing_codes/${code}`);
-        set(codeRef, { status: 'waiting', createdAt: Date.now() });
+        set(codeRef, { status: 'waiting', createdAt: Date.now() })
+            .then(() => setStatus('Sẵn sàng — nhập mã ở trên vào trang Quản lý'))
+            .catch((err) => {
+                console.error('Không ghi được mã pairing:', err);
+                setStatus('Không kết nối được máy chủ. Kiểm tra mạng rồi tải lại trang.');
+            });
 
         const unsub = onValue(codeRef, (snapshot) => {
             const data = snapshot.val();

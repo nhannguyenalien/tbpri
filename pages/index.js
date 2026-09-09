@@ -695,7 +695,7 @@ export default function HomeAdmin() {
 
       <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>
         <strong>📺 Link hiển thị Tivi: </strong>
-        <a href={`/${user.uid}`} target="_blank" rel="noreferrer" style={{ color: '#007acc' }}>{window.location.origin}/{user.uid}</a>
+        <a href={`/${user.uid}`} target="_blank" rel="noreferrer" style={{ color: '#007acc' }}>{typeof window !== 'undefined' ? window.location.origin : ''}/{user.uid}</a>
 
       </div>
       <div style={{

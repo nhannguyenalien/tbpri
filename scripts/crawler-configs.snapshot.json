@@ -31,16 +31,6 @@
     "buy_selector": "td:nth-child(2)",
     "sell_selector": "td:nth-child(3)"
   },
-  "mao_thiet": {
-    "name": "MT (Miền Nam)",
-    "enabled": false,
-    "url": "https://giavangmaothiet.com/gia-vang-cho-den/",
-    "row_selector": "table tr:has(td)",
-    "name_selector": "td:nth-child(1)",
-    "buy_selector": "td:nth-child(2)",
-    "sell_selector": "td:nth-child(3)",
-    "note": "giavangmaothiet.com không còn DNS (ENOTFOUND) — cần URL mới"
-  },
   "mi_hong": {
     "name": "MH (Miền Nam)",
     "type": "api",
@@ -97,31 +87,18 @@
     "name": "SJC",
     "type": "api",
     "enabled": true,
-    "api_url": "https://sjc.com.vn/GoldPrice/Services/PriceService.ashx",
-    "data_path": "Table",
+    "api_url": "https://edge-cf-api.pnj.io/ecom-frontend/v1/get-gold-price?zone=00",
+    "data_path": "data",
     "mapping": {
-      "name": "TypeName",
-      "buy": "Buy",
-      "sell": "Sell"
+      "name": "tensp",
+      "buy": "giamua",
+      "sell": "giaban"
     },
     "transform": {
-      "remove_comma": true
+      "remove_comma": true,
+      "unit": "x1000"
     },
-    "fallbacks": [
-      {
-        "api_url": "https://edge-cf-api.pnj.io/ecom-frontend/v1/get-gold-price?zone=00",
-        "data_path": "data",
-        "mapping": {
-          "name": "tensp",
-          "buy": "giamua",
-          "sell": "giaban"
-        },
-        "transform": {
-          "unit": "x1000"
-        },
-        "include": "^Vàng miếng SJC"
-      }
-    ]
+    "include": "^Vàng miếng SJC"
   },
   "ngoc_van_khoa": {
     "name": "Ngọc Vân Khoa",

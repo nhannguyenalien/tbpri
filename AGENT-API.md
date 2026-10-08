@@ -39,5 +39,4 @@ POST /api/agent/prices
 ## Sửa nguồn lỗi + thêm `ngoc_van_khoa` (dán vào trang `/crawler` rồi Save)
 Xem `scripts/crawler-configs.snapshot.json` (đã sửa `btmc`, `sjc`, `mao_thiet`).
 - `btmc`: bảng có ô gộp làm lệch cột + giá tính theo nghìn → đếm cột từ cuối, `unit x1000`.
-- `sjc`: sjc.com.vn chặn bằng Cloudflare (403) → thêm `fallbacks` lấy "Vàng miếng SJC" từ API PNJ.
-- `mao_thiet`: domain `giavangmaothiet.com` không còn tồn tại (ENOTFOUND) → tắt, cần URL mới.
+- `sjc`: sjc.com.vn chặn Cloudflare (403) → đang lấy "Vàng miếng SJC" từ API PNJ (`include` lọc tên).

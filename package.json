@@ -10,6 +10,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/postcss": "^4.2.2",
+    "cheerio": "^1.2.0",
     "firebase": "^10.8.0",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",

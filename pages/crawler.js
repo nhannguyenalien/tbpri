@@ -60,9 +60,10 @@ export default function CrawlerManager() {
     setJsonInput(JSON.stringify(JSON_TEMPLATE, null, 2));
   };
 
-  const handleSaveJson = () => {
+  const handleSaveJson = async () => {
     try {
       const parsedData = JSON.parse(jsonInput);
+      const writes = [];
 
       Object.entries(parsedData).forEach(([key, cfg]) => {
 
@@ -80,9 +81,10 @@ export default function CrawlerManager() {
           }
         }
 
-        set(ref(db, `crawler_configs/${key}`), cfg);
+        writes.push(set(ref(db, `crawler_configs/${key}`), cfg));
       });
 
+      await Promise.all(writes);
       alert("✅ Lưu cấu hình thành công!");
       setJsonInput("");
 

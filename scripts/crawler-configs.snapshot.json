@@ -1,0 +1,126 @@
+{
+  "btmc": {
+    "name": "BTMC (Miền Bắc)",
+    "enabled": true,
+    "url": "https://btmc.vn/gia-vang-theo-ngay.html",
+    "row_selector": "table tr",
+    "name_selector": "td:nth-last-child(5)",
+    "buy_selector": "td:nth-last-child(3)",
+    "sell_selector": "td:nth-last-child(2)",
+    "transform": {
+      "unit": "x1000"
+    }
+  },
+  "giavang_api": {
+    "name": "Giá vàng tổng hợp",
+    "enabled": true,
+    "api_url": "https://api2.giavang.net/v1/gold/last-price?codes[]=BTSJC&codes[]=SJ9999&codes[]=DOHCML",
+    "data_path": "data",
+    "mapping": {
+      "name": "type_code",
+      "buy": "buy",
+      "sell": "sell"
+    }
+  },
+  "kim_khanh": {
+    "name": "KKVH (Miền trung)",
+    "enabled": true,
+    "url": "https://kimkhanhviethung.vn/tra-cuu-gia-vang.html",
+    "row_selector": "table tr:not(:first-child)",
+    "name_selector": "td:nth-child(1)",
+    "buy_selector": "td:nth-child(2)",
+    "sell_selector": "td:nth-child(3)"
+  },
+  "mao_thiet": {
+    "name": "MT (Miền Nam)",
+    "enabled": false,
+    "url": "https://giavangmaothiet.com/gia-vang-cho-den/",
+    "row_selector": "table tr:has(td)",
+    "name_selector": "td:nth-child(1)",
+    "buy_selector": "td:nth-child(2)",
+    "sell_selector": "td:nth-child(3)",
+    "note": "giavangmaothiet.com không còn DNS (ENOTFOUND) — cần URL mới"
+  },
+  "mi_hong": {
+    "name": "MH (Miền Nam)",
+    "type": "api",
+    "enabled": true,
+    "api_url": "https://api.mihong.vn/v1/gold-prices?market=domestic",
+    "data_path": "",
+    "mapping": {
+      "name": "code",
+      "buy": "buyingPrice",
+      "sell": "sellingPrice"
+    },
+    "transform": {
+      "remove_comma": false,
+      "unit": ""
+    }
+  },
+  "ngoc_thuy": {
+    "name": "NT (Miền Nam)",
+    "enabled": true,
+    "url": "https://tiemvangngocthuy.com/gia-vang-hom-nay/",
+    "row_selector": "table tr",
+    "name_selector": "td:nth-child(1)",
+    "buy_selector": "td:nth-child(3)",
+    "sell_selector": "td:nth-child(2)"
+  },
+  "phu_quy": {
+    "name": "Phú Quý",
+    "enabled": true,
+    "url": "https://phuquygroup.vn/",
+    "row_selector": "table tr",
+    "name_selector": "td:nth-child(1)",
+    "buy_selector": "td:nth-child(2)",
+    "sell_selector": "td:nth-child(3)",
+    "transform": {
+      "remove_comma": true
+    }
+  },
+  "pnj": {
+    "name": "PNJ",
+    "type": "api",
+    "enabled": true,
+    "api_url": "https://edge-cf-api.pnj.io/ecom-frontend/v1/get-gold-price?zone=00",
+    "data_path": "data",
+    "mapping": {
+      "name": "tensp",
+      "buy": "giamua",
+      "sell": "giaban"
+    },
+    "transform": {
+      "unit": "x1000"
+    }
+  },
+  "sjc": {
+    "name": "SJC",
+    "type": "api",
+    "enabled": true,
+    "api_url": "https://sjc.com.vn/GoldPrice/Services/PriceService.ashx",
+    "data_path": "Table",
+    "mapping": {
+      "name": "TypeName",
+      "buy": "Buy",
+      "sell": "Sell"
+    },
+    "transform": {
+      "remove_comma": true
+    },
+    "fallbacks": [
+      {
+        "api_url": "https://edge-cf-api.pnj.io/ecom-frontend/v1/get-gold-price?zone=00",
+        "data_path": "data",
+        "mapping": {
+          "name": "tensp",
+          "buy": "giamua",
+          "sell": "giaban"
+        },
+        "transform": {
+          "unit": "x1000"
+        },
+        "include": "^Vàng miếng SJC"
+      }
+    ]
+  }
+}

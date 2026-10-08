@@ -49,10 +49,20 @@ return () => clearInterval(t);
 // --- LOGIC 3: TIMER RELOAD ---
 useEffect(() => {
 // 1. Reload toàn trang mỗi 30 phút — giải phóng RAM TV
-const pageReload = setTimeout(() => {
+// Đang mất mạng thì KHÔNG reload (reload lúc offline ra trang lỗi/trắng) — thử lại sau 1 phút.
+let pageReload;
+const scheduleReload = (ms) => {
+pageReload = setTimeout(() => {
+if (navigator.onLine === false) {
+console.log("⏸️ Offline, hoãn reload 1 phút");
+scheduleReload(60 * 1000);
+return;
+}
 console.log("🔄 Reload trang sau 30 phút...");
 window.location.reload();
-}, 30 * 60 * 1000);
+}, ms);
+};
+scheduleReload(30 * 60 * 1000);
 
 // 2. Reload iframe TradingView mỗi 5 phút
 // - Dùng about:blank trước để TV browser BUỘC phải load mới
@@ -160,7 +170,8 @@ isFirstRender.current = false;
 lastRenderHash.current = currentHash;
 } else {
 // CHỈ CẬP NHẬT GIÁ: không overwrite container → iframe TradingView sống sót
-const tbody = document.querySelector('.price-table tbody');
+const tbody = document.querySelector('.price-table tbody') ||
+document.querySelector('.gold-table tbody');
 if (tbody) {
 tbody.innerHTML = rowsHtml;
 } else {

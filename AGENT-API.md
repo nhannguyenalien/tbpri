@@ -36,7 +36,7 @@ POST /api/agent/prices
 ```
 `replace:true` thay toàn bộ danh sách; mặc định giữ các dòng cũ không nhắc tới. Giá bảng TV của 1 tiệm: `/api/agent/shops/<uid>/prices`.
 
-## Sửa 3 nguồn đang lỗi (dán vào trang `/crawler` rồi Save)
+## Sửa nguồn lỗi + thêm `ngoc_van_khoa` (dán vào trang `/crawler` rồi Save)
 Xem `scripts/crawler-configs.snapshot.json` (đã sửa `btmc`, `sjc`, `mao_thiet`).
 - `btmc`: bảng có ô gộp làm lệch cột + giá tính theo nghìn → đếm cột từ cuối, `unit x1000`.
 - `sjc`: sjc.com.vn chặn bằng Cloudflare (403) → thêm `fallbacks` lấy "Vàng miếng SJC" từ API PNJ.

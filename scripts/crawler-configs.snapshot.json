@@ -122,5 +122,14 @@
         "include": "^Vàng miếng SJC"
       }
     ]
+  },
+  "ngoc_van_khoa": {
+    "name": "Ngọc Vân Khoa",
+    "enabled": true,
+    "url": "https://ngocvankhoa.vn/",
+    "row_selector": "table tr:has(td)",
+    "name_selector": "td:nth-child(1)",
+    "buy_selector": "td:nth-child(2)",
+    "sell_selector": "td:nth-child(3)"
   }
 }

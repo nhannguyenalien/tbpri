@@ -25,7 +25,7 @@ export default function handler(req, res) {
     config_schema: {
       common: { name: 'string (bắt buộc)', enabled: 'boolean (mặc định true)', type: '"html" | "api" (tự đoán theo api_url)', include: 'regex lọc tên loại vàng', exclude: 'regex loại bỏ', headers: '{ "Header": "giá trị" }', transform: '{ unit: "x1000" } khi nguồn ghi giá theo nghìn', fallbacks: '[ {field ghi đè} ] thử lần lượt khi nguồn chính lỗi' },
       html: { url: '', row_selector: 'CSS chọn các dòng, vd "table tr"', name_selector: 'CSS tương đối trong dòng, vd "td:nth-child(1)"', buy_selector: '', sell_selector: '', tip: 'Dòng có ô gộp (rowspan) lệch cột -> đếm từ cuối: td:nth-last-child(3)' },
-      api: { api_url: '', data_path: 'đường dẫn tới mảng, vd "data" hoặc "result.items" ("" = gốc)', mapping: '{ name, buy, sell } là tên field trong mỗi phần tử' },
+      api: { format: '"seroval" cho site TanStack Start (/_serverFn/<id>, cần header x-tsr-serverfn: true)', api_url: '', data_path: 'đường dẫn tới mảng, vd "data" hoặc "result.items" ("" = gốc)', mapping: '{ name, buy, sell } là tên field trong mỗi phần tử' },
     },
   });
 }

@@ -102,11 +102,19 @@
   },
   "ngoc_van_khoa": {
     "name": "Ngọc Vân Khoa",
+    "type": "api",
     "enabled": true,
-    "url": "https://ngocvankhoa.vn/",
-    "row_selector": "table tr:has(td)",
-    "name_selector": "td:nth-child(1)",
-    "buy_selector": "td:nth-child(2)",
-    "sell_selector": "td:nth-child(3)"
+    "api_url": "https://ngocvankhoa.vn/_serverFn/49b37ad2e333c697a5e9ee51b6ea2e0364ba9ad99114fa7a43338b5d27fdabcb",
+    "format": "seroval",
+    "data_path": "result.rows",
+    "mapping": {
+      "name": "name",
+      "buy": "buy",
+      "sell": "sell"
+    },
+    "headers": {
+      "x-tsr-serverfn": "true"
+    },
+    "note": "Lấy từ server function của site (TanStack Start); id đổi khi họ build lại -> cần lấy lại từ bundle JS"
   }
 }

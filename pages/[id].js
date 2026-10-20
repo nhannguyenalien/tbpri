@@ -226,11 +226,22 @@ const CONN_ERR_HTML =
 '<div style="font-size:14px;opacity:.6;margin-top:16px">Hệ thống đang tự thử lại…</div>' +
 '</div>';
 
+const notFoundHtml = (name) =>
+'<div style="position:fixed;inset:0;background:#0a1f3d;color:#fff;font-family:sans-serif;' +
+'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.6;padding:24px">' +
+'<div style="font-size:26px;margin-bottom:10px;font-weight:700">Không tìm thấy bảng giá</div>' +
+'<div style="font-size:17px;opacity:.9">Địa chỉ "' + esc(name) + '" chưa được đăng ký.<br>Kiểm tra lại tên đường dẫn.</div>' +
+'</div>';
+
 // --- LOGIC 5: FIREBASE REALTIME + CACHE CHỐNG TRẮNG MÀN HÌNH ---
 useEffect(() => {
 if (!router.isReady) return;
-const { id } = router.query;
-if (!id) return;
+const { id: rawId } = router.query;
+if (!rawId) return;
+// Đường dẫn rút gọn: /ten-tiem (<=24 ký tự, không phân biệt hoa thường) -> tra bảng slugs ra uid.
+// UID thật của Firebase dài 28 ký tự nên không bao giờ bị nhầm với slug.
+const isSlug = rawId.length <= 24;
+const id = isSlug ? rawId.toLowerCase() : rawId;
 
 const cacheKey = `tv_cache_${id}`;
 
@@ -286,10 +297,12 @@ try { fetch(`${FALLBACK_ORIGIN}/api/board/${encodeURIComponent(id)}`, { mode: 'n
 const firstPoll = setTimeout(poll, 4000);
 const pollTimer = setInterval(poll, 10000);
 
-// 3. Lắng nghe realtime.
-const boardRef = ref(db, `tv_sessions/${id}`);
-const unsubscribe = onValue(
-boardRef,
+// 3. Lắng nghe realtime. Slug -> uid trước (nếu tra lỗi thì thử coi id là uid), rồi nghe bảng giá.
+let unsubscribe = () => {};
+const startBoard = (uid) => {
+unsubscribe();
+unsubscribe = onValue(
+ref(db, `tv_sessions/${uid}`),
 (snapshot) => {
 if (!snapshot.exists()) return;
 lastFbAt = Date.now();
@@ -307,6 +320,24 @@ if (container) container.innerHTML = CONN_ERR_HTML;
 }
 }
 );
+};
+let unsubSlug = () => {};
+if (isSlug) {
+unsubSlug = onValue(
+ref(db, `slugs/${id}`),
+(snap) => {
+if (snap.exists() && typeof snap.val() === 'string') {
+startBoard(snap.val());
+} else if (isFirstRender.current) {
+const container = document.getElementById('display-board');
+if (container) container.innerHTML = notFoundHtml(id);
+}
+},
+() => startBoard(id) // không đọc được slugs -> thử coi id là uid (link cũ vẫn chạy)
+);
+} else {
+startBoard(id);
+}
 
 // 4. Theo dõi trạng thái kết nối để hiện/ẩn badge "mất kết nối".
 const unsubConn = onValue(ref(db, '.info/connected'), (s) => {
@@ -318,6 +349,7 @@ return () => {
 clearTimeout(connTimeout);
 clearTimeout(firstPoll);
 clearInterval(pollTimer);
+unsubSlug();
 unsubscribe();
 unsubConn();
 };

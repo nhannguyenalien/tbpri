@@ -9,7 +9,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'bad id' });
   }
   try {
-    const r = await fetch(`${DB_URL}/tv_sessions/${encodeURIComponent(id)}.json`, {
+    let uid = id;
+    // id <= 24 ký tự là slug rút gọn -> tra ra uid (UID Firebase dài 28 ký tự)
+    if (id.length <= 24) {
+      const sr = await fetch(`${DB_URL}/slugs/${encodeURIComponent(id.toLowerCase())}.json`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      const mapped = sr.ok ? await sr.json() : null;
+      if (typeof mapped !== 'string') return res.status(404).json({ error: 'slug not found' });
+      uid = mapped;
+    }
+    const r = await fetch(`${DB_URL}/tv_sessions/${encodeURIComponent(uid)}.json`, {
       signal: AbortSignal.timeout(8000),
     });
     if (!r.ok) return res.status(502).json({ error: `upstream ${r.status}` });

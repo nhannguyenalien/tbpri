@@ -222,6 +222,74 @@ const getPreviewHtml = (template, formatVND) => {
   `;
 };
 
+// --- ĐƯỜNG DẪN RÚT GỌN: khách gõ domain/ten-tiem trên trình duyệt Tivi là ra bảng giá ---
+const RESERVED_SLUGS = ['api', 'connect', 'landing', 'premium', 'crawler', 'admintemplate', 'openbb', 'admin', 'login', 'www', 'static'];
+const slugify = (v) => String(v || '')
+  .toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24).replace(/-+$/g, '');
+
+function ShortLinkBox({ uid, currentSlug, shopName }) {
+  const [value, setValue] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const host = origin.replace(/^https?:\/\//, '');
+  const slug = slugify(value);
+  const valid = slug.length >= 3 && !RESERVED_SLUGS.includes(slug);
+
+  useEffect(() => { setValue(currentSlug || slugify(shopName)); }, [currentSlug, shopName]);
+
+  const save = async () => {
+    if (!valid) return setMsg({ ok: false, text: 'Tên cần từ 3 ký tự (chữ, số, dấu gạch ngang) và không trùng tên hệ thống.' });
+    setBusy(true); setMsg(null);
+    try {
+      const r = ref(db, `slugs/${slug}`);
+      const snap = await get(r);
+      if (snap.exists() && snap.val() !== uid) {
+        setMsg({ ok: false, text: `"${slug}" đã có người dùng, hãy chọn tên khác.` });
+        return;
+      }
+      await set(r, uid);
+      if (currentSlug && currentSlug !== slug) await set(ref(db, `slugs/${currentSlug}`), null);
+      await update(ref(db, `tv_sessions/${uid}`), { slug });
+      setMsg({ ok: true, text: 'Đã lưu! Mở trình duyệt Tivi và gõ địa chỉ bên dưới.' });
+    } catch (e) {
+      const denied = /permission/i.test(e.message || '') || e.code === 'PERMISSION_DENIED';
+      setMsg({ ok: false, text: denied ? 'Chưa lưu được: máy chủ chưa bật tính năng đường dẫn rút gọn.' : 'Không lưu được: ' + e.message });
+    } finally { setBusy(false); }
+  };
+
+  const copy = () => { try { navigator.clipboard.writeText(`${origin}/${currentSlug}`); setMsg({ ok: true, text: 'Đã sao chép link.' }); } catch (e) {} };
+
+  return (
+    <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>
+      <strong>📺 Địa chỉ xem bảng giá trên Tivi</strong>
+      {currentSlug ? (
+        <div style={{ margin: '8px 0 10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <a href={`/${currentSlug}`} target="_blank" rel="noreferrer" style={{ color: '#d32f2f', fontSize: '22px', fontWeight: 'bold', wordBreak: 'break-all' }}>{host}/{currentSlug}</a>
+          <button onClick={copy} style={{ padding: '4px 10px', cursor: 'pointer' }}>Sao chép</button>
+        </div>
+      ) : (
+        <div style={{ margin: '6px 0 8px', color: '#555' }}>Đặt một tên ngắn để gõ trên Tivi cho dễ (thay cho link dài).</div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <span style={{ color: '#555' }}>{host}/</span>
+        <input value={value} onChange={(e) => { setValue(e.target.value); setMsg(null); }} placeholder="ten-tiem-vang" maxLength={40}
+          style={{ padding: '6px 10px', border: '1px solid #bbb', borderRadius: '4px', minWidth: '180px' }} />
+        <button onClick={save} disabled={busy || !valid || slug === currentSlug}
+          style={{ padding: '6px 14px', background: '#007acc', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: (busy || !valid || slug === currentSlug) ? 0.5 : 1 }}>
+          {busy ? 'Đang lưu...' : currentSlug ? 'Đổi tên' : 'Lưu'}
+        </button>
+      </div>
+      {value && slug !== value && <div style={{ fontSize: '12px', color: '#555', marginTop: '6px' }}>Sẽ lưu thành: <b>{slug || '(chưa hợp lệ)'}</b></div>}
+      {msg && <div style={{ fontSize: '13px', marginTop: '8px', color: msg.ok ? '#2e7d32' : '#c62828' }}>{msg.text}</div>}
+      <div style={{ fontSize: '12px', color: '#777', marginTop: '8px' }}>
+        Link dài (dự phòng): <a href={`/${uid}`} target="_blank" rel="noreferrer" style={{ color: '#007acc' }}>{host}/{uid}</a>
+      </div>
+    </div>
+  );
+}
+
 export default function HomeAdmin() {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -693,11 +761,7 @@ export default function HomeAdmin() {
 
       {isArchiving && <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', background: '#333', color: '#fff', padding: '8px 20px', borderRadius: '20px', fontSize: '12px', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>🔄 Đang tự động lưu lịch sử giá...</div>}
 
-      <div style={{ background: '#e3f2fd', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>
-        <strong>📺 Link hiển thị Tivi: </strong>
-        <a href={`/${user.uid}`} target="_blank" rel="noreferrer" style={{ color: '#007acc' }}>{typeof window !== 'undefined' ? window.location.origin : ''}/{user.uid}</a>
-
-      </div>
+      <ShortLinkBox uid={user.uid} currentSlug={boardData?.slug} shopName={boardData?.shop_name} />
       <div style={{
         background: '#fff',
         padding: '20px',

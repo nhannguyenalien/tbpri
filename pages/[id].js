@@ -253,12 +253,35 @@ if (container) container.innerHTML = CONN_ERR_HTML;
 }
 }, 15000);
 
+// 2b. Đường dự phòng: nếu Firebase không trả dữ liệu (WiFi chặn), poll qua chính domain của app.
+let lastFbAt = 0;
+let pollBusy = false;
+const poll = async () => {
+if (pollBusy || Date.now() - lastFbAt < 20000) return;
+pollBusy = true;
+try {
+const r = await fetch(`/api/board/${encodeURIComponent(id)}`, { cache: 'no-store' });
+if (r.ok) {
+const { v } = await r.json();
+if (v && Date.now() - lastFbAt >= 20000) {
+paintBoard(v);
+setConnLost(false);
+try { localStorage.setItem(cacheKey, JSON.stringify({ v, ts: Date.now() })); } catch (e) {}
+}
+}
+} catch (e) { /* mạng lỗi thì lần sau thử lại */ }
+pollBusy = false;
+};
+const firstPoll = setTimeout(poll, 4000);
+const pollTimer = setInterval(poll, 10000);
+
 // 3. Lắng nghe realtime.
 const boardRef = ref(db, `tv_sessions/${id}`);
 const unsubscribe = onValue(
 boardRef,
 (snapshot) => {
 if (!snapshot.exists()) return;
+lastFbAt = Date.now();
 const boardData = snapshot.val();
 paintBoard(boardData);
 try {
@@ -282,6 +305,8 @@ else if (!isFirstRender.current) setConnLost(true);
 
 return () => {
 clearTimeout(connTimeout);
+clearTimeout(firstPoll);
+clearInterval(pollTimer);
 unsubscribe();
 unsubConn();
 };

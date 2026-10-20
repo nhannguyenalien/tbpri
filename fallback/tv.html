@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bảng giá</title>
+<style>html,body{margin:0;background:#0a1f3d}#display-board{transform-origin:top center}
+#msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;font:20px sans-serif;line-height:1.6;padding:24px}</style>
+</head><body><div id="display-board"><div id="msg">Đang tải bảng giá...</div></div>
+<script>
+(function () {
+var id = decodeURIComponent(location.pathname.split('/').filter(Boolean)[0] || '');
+var KEY = 'tv_cache_' + id, lastHash = '', first = true;
+var board = document.getElementById('display-board');
+
+function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function vnd(v) { if (v == null || v === '') return '0'; return String(v).replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+
+function render(d) {
+  var rowT = d.row_template || '', rows = '';
+  (d.prices || []).forEach(function (p) {
+    rows += rowT.replace(/{{LOAI_VANG}}/g, function () { return esc(p.name || ''); })
+                .replace(/{{GIA_MUA}}/g, function () { return vnd(p.mua); })
+                .replace(/{{GIA_BAN}}/g, function () { return vnd(p.ban); });
+  });
+  var n = new Date(), ds = n.getDate() + '/' + (n.getMonth() + 1) + '/' + n.getFullYear();
+  var full = (d.html_template || '')
+    .replace(/{{SHOP_NAME}}/g, function () { return esc(d.shop_name || 'TIỆM VÀNG'); })
+    .replace(/{{SHOP_ADDRESS}}/g, function () { return esc(d.shop_address || ''); })
+    .replace(/{{SHOP_PHONE}}/g, function () { return esc(d.shop_phone || ''); })
+    .replace(/{{CURRENT_DATE}}/g, function () { return ds; })
+    .replace(/{{MARQUEE_TEXT}}/g, function () { return esc(d.marquee_text || 'Chúc Quý Khách Phát Tài Phát Lộc!'); })
+    .replace(/{{PRICE_LIST}}/g, function () { return rows; });
+  return { full: full, rows: rows };
+}
+
+function paint(d) {
+  var r = render(d), h = d.template_id + '_' + d.shop_name + '_' + d.shop_address + '_' + d.shop_phone + '_' + (d.css_template || '').length;
+  if (first || h !== lastHash) {
+    var st = document.getElementById('tv-dynamic-style');
+    if (!st) { st = document.createElement('style'); st.id = 'tv-dynamic-style'; document.head.appendChild(st); }
+    st.innerHTML = d.css_template || '';
+    board.innerHTML = '<div class="template-content">' + r.full + '</div>';
+    first = false; lastHash = h;
+  } else {
+    var tb = document.querySelector('.price-table tbody') || document.querySelector('.gold-table tbody');
+    if (tb) tb.innerHTML = r.rows;
+    else { var g = document.querySelector('.grid-container') || document.querySelector('.price-table'); if (g) g.innerHTML = r.rows; }
+    var m = document.querySelector('marquee');
+    if (m) { var t = m.querySelector('*') || m, nm = d.marquee_text || 'Chúc Quý Khách Phát Tài Phát Lộc!'; if (t.textContent !== nm) t.textContent = nm; }
+    var de = document.getElementById('current-date');
+    if (de) { var x = new Date(); de.innerText = x.getDate() + '/' + (x.getMonth() + 1) + '/' + x.getFullYear(); }
+  }
+}
+
+function load() {
+  fetch('/api/board/' + encodeURIComponent(id), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (j) {
+      if (!j || !j.v) return;
+      paint(j.v);
+      try { localStorage.setItem(KEY, JSON.stringify({ v: j.v })); } catch (e) {}
+    })
+    .catch(function () { /* giữ bảng đang hiển thị */ });
+}
+
+try { var c = JSON.parse(localStorage.getItem(KEY) || 'null'); if (c && c.v) paint(c.v); } catch (e) {}
+load();
+setInterval(load, 60 * 1000);
+setInterval(function () { var el = document.getElementById('clock'); if (el) el.innerText = new Date().toLocaleTimeString('vi-VN'); }, 1000);
+// reload iframe (TradingView) mỗi 5 phút để giải phóng RAM TV
+setInterval(function () {
+  document.querySelectorAll('#display-board iframe').forEach(function (f, i) {
+    if (!f.getAttribute('data-src')) f.setAttribute('data-src', f.src);
+    setTimeout(function () { f.src = 'about:blank'; setTimeout(function () { f.src = f.getAttribute('data-src'); }, 2000); }, i * 3000);
+  });
+}, 5 * 60 * 1000);
+// zoom lưu chung khoá với trang chính
+try { var z = parseFloat(localStorage.getItem('tv_zoom_level')); if (z) board.style.zoom = z; } catch (e) {}
+})();
+</script></body></html>

@@ -87,6 +87,7 @@ async function fbGet(p, query = {}) {
 async function backupAll() {
   const t = await adminToken();
   if (!t) { qMeta.run('backup_error', 'chưa cấu hình FIREBASE_SERVICE_ACCOUNT'); return; }
+  qMeta.run('backup_error', '');
   const out = {};
   try {
     const r = await fetch(`${DB_URL}/.json?${new URLSearchParams({ [t.kind]: t.value })}`, { signal: AbortSignal.timeout(180000) });

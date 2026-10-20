@@ -3,6 +3,9 @@ import { useEffect, useRef } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../lib/firebase';
 
+const FALLBACK_ORIGIN = (process.env.NEXT_PUBLIC_FALLBACK_ORIGIN || '').replace(/\/$/, '');
+const FALLBACK_ORIGINS = FALLBACK_ORIGIN ? ['', FALLBACK_ORIGIN] : [''];
+
 export default function TVDisplay() {
 const router = useRouter();
 const isFirstRender = useRef(true);
@@ -260,18 +263,26 @@ const poll = async () => {
 if (pollBusy || Date.now() - lastFbAt < 20000) return;
 pollBusy = true;
 try {
-const r = await fetch(`/api/board/${encodeURIComponent(id)}`, { cache: 'no-store' });
-if (r.ok) {
-const { v } = await r.json();
+// Thử lần lượt: domain hiện tại, rồi VPS dự phòng (nếu có cấu hình).
+let v = null;
+for (const origin of FALLBACK_ORIGINS) {
+try {
+const r = await fetch(`${origin}/api/board/${encodeURIComponent(id)}`, { cache: 'no-store' });
+if (r.ok) { v = (await r.json()).v; if (v) break; }
+} catch (e) { /* origin này lỗi, thử cái tiếp */ }
+}
 if (v && Date.now() - lastFbAt >= 20000) {
 paintBoard(v);
 setConnLost(false);
 try { localStorage.setItem(cacheKey, JSON.stringify({ v, ts: Date.now() })); } catch (e) {}
 }
-}
-} catch (e) { /* mạng lỗi thì lần sau thử lại */ }
+} catch (e) { /* lần sau thử lại */ }
 pollBusy = false;
 };
+// Báo VPS dự phòng biết id này để nó bắt đầu lưu bản sao (không cần đọc kết quả).
+if (FALLBACK_ORIGIN) {
+try { fetch(`${FALLBACK_ORIGIN}/api/board/${encodeURIComponent(id)}`, { mode: 'no-cors' }).catch(() => {}); } catch (e) {}
+}
 const firstPoll = setTimeout(poll, 4000);
 const pollTimer = setInterval(poll, 10000);
 

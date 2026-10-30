@@ -3,6 +3,7 @@
 // - Phục vụ trang TV (/:id) và JSON (/api/board/:id) kể cả khi Firebase/Vercel chết.
 // Env: PORT, DB_PATH, BOARD_IDS (id cách nhau dấu phẩy), SYNC_MINUTES,
 //      BACKUP_MINUTES (mặc định 60), BACKUP_KEEP_HOURS (mặc định 48)
+//      TURSO_URL + TURSO_AUTH_TOKEN (tuỳ chọn: đẩy bản sao sang Turso cho hệ thống dự phòng Cloudflare)
 //      FIREBASE_SERVICE_ACCOUNT (khuyên dùng: sao lưu TOÀN BỘ RTDB + user Auth)
 //      hoặc FIREBASE_ADMIN_EMAIL+FIREBASE_ADMIN_PASSWORD (chỉ đọc được RTDB, không có user Auth)
 import http from 'node:http';
@@ -11,6 +12,7 @@ import path from 'node:path';
 import { createSign } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
+import { syncToTurso } from './turso-sync.mjs';
 
 const DB_URL = 'https://pricegold-4925d-default-rtdb.asia-southeast1.firebasedatabase.app';
 const WEB_API_KEY = 'AIzaSyDxaz1uBWKpDZ-J7qRX81BajLHrOmfVyM0'; // public (có sẵn trong app)
@@ -89,10 +91,13 @@ async function backupAll() {
   if (!t) { qMeta.run('backup_error', 'chưa cấu hình FIREBASE_SERVICE_ACCOUNT'); return; }
   qMeta.run('backup_error', '');
   const out = {};
+  let dump = null;
+  const authUsers = [];
   try {
     const r = await fetch(`${DB_URL}/.json?${new URLSearchParams({ [t.kind]: t.value })}`, { signal: AbortSignal.timeout(180000) });
     if (!r.ok) throw new Error(`rtdb ${r.status}`);
     const data = await r.json();
+    dump = data;
     const gz = gzipSync(JSON.stringify(data));
     const ts = Date.now();
     db.prepare('INSERT OR REPLACE INTO snapshots (ts, bytes, data) VALUES (?, ?, ?)').run(ts, gz.length, gz);
@@ -116,13 +121,20 @@ async function backupAll() {
         });
         const j = await r.json();
         if (!r.ok) throw new Error(`auth ${r.status}: ${j.error && j.error.message}`);
-        for (const u of j.users || []) { up.run(u.localId, JSON.stringify(u), Date.now()); n++; }
+        for (const u of j.users || []) { up.run(u.localId, JSON.stringify(u), Date.now()); authUsers.push(u); n++; }
         page = j.nextPageToken || '';
       } while (page);
       out.auth_users = n;
       qMeta.run('auth_last_ok', String(Date.now())); qMeta.run('auth_users', String(n)); qMeta.run('auth_error', '');
     } catch (e) { out.auth_error = e.message; qMeta.run('auth_error', e.message); }
   } else { out.auth_users = 'bỏ qua (cần service account)'; }
+
+  if (process.env.TURSO_URL && dump) { // chỉ đồng bộ khi RTDB vừa lấy thành công
+    try {
+      out.turso = await syncToTurso({ url: process.env.TURSO_URL, token: process.env.TURSO_AUTH_TOKEN, data: dump, users: authUsers });
+      qMeta.run('turso_last_ok', String(Date.now())); qMeta.run('turso_error', '');
+    } catch (e) { out.turso_error = e.message; qMeta.run('turso_error', e.message); }
+  }
   log('backup:', JSON.stringify(out));
 }
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "goldprice-fallback",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2024-09-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "observability": { "enabled": true }
+  // Biến cần đặt (wrangler secret put / Dashboard):
+  //   TURSO_URL, TURSO_AUTH_TOKEN, SESSION_SECRET (>= 24 ký tự ngẫu nhiên), GOOGLE_CLIENT_ID
+  // Biến build: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+}

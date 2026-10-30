@@ -1,0 +1,31 @@
+{
+  "name": "goldprice-cf-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-build": "node scripts/prepare.mjs",
+    "dev": "node scripts/prepare.mjs && cd .build && next dev",
+    "build": "node scripts/prepare.mjs && cd .build && next build",
+    "cf:build": "node scripts/prepare.mjs && cd .build && opennextjs-cloudflare build",
+    "cf:deploy": "node scripts/prepare.mjs && cd .build && opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+  },
+  "dependencies": {
+    
+    "@monaco-editor/react": "^4.7.0",
+    "@tailwindcss/postcss": "^4.2.2",
+    "lucide-react": "^1.7.0",
+    "motion": "^12.38.0",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@opennextjs/cloudflare": "^1.17.1",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.0.0",
+    "wrangler": "^4.73.0"
+  }
+}

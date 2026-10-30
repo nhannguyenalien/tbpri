@@ -1,0 +1,65 @@
+# Tự build + deploy hệ thống dự phòng (cf-system/) lên Cloudflare Workers khi giao diện hoặc cf-system đổi.
+# Cần: secret CLOUDFLARE_API_TOKEN (quyền "Edit Cloudflare Workers"), variable CLOUDFLARE_ACCOUNT_ID,
+#      variable GOOGLE_CLIENT_ID (tuỳ chọn, bật đăng nhập Google).
+# Biến chạy của Worker (TURSO_URL, TURSO_AUTH_TOKEN, SESSION_SECRET) đã nằm trên Cloudflare, deploy không đụng tới.
+name: Deploy Cloudflare fallback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pages/**'
+      - 'style/**'
+      - 'lib/auth.js'
+      - 'postcss.config.mjs'
+      - 'cf-system/**'
+      - '.github/workflows/cf-deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: cf-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+    steps:
+      - name: Kiểm tra cấu hình
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::Chưa có secret CLOUDFLARE_API_TOKEN — bỏ qua deploy."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ok == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cf-system/package-lock.json
+
+      - name: Cài thư viện
+        if: steps.check.outputs.ok == 'true'
+        working-directory: cf-system
+        run: npm ci
+
+      - name: Build (OpenNext)
+        if: steps.check.outputs.ok == 'true'
+        working-directory: cf-system
+        run: npm run cf:build
+
+      - name: Deploy
+        if: steps.check.outputs.ok == 'true'
+        working-directory: cf-system/.build
+        run: npx wrangler deploy
